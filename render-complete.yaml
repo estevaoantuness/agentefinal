@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: pangeia-agent
+    runtime: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://post_pangeia_user:yblhBhZz3n15SY6kikdYT5SbAekGky26@dpg-d44ll7q4d50c73ejkfrg-a.oregon-postgres.render.com/post_pangeia
+
+      - key: EVOLUTION_API_URL
+        value: https://evo.pictorial.cloud
+
+      - key: EVOLUTION_API_KEY
+        value: 7LjVQc6PJJFFgzy14pzH90QffOOus0z2
+
+      - key: EVOLUTION_INSTANCE_NAME
+        value: pangeia_bot
+
+      - key: NOTION_API_KEY
+        value: your_notion_api_key_here
+
+      - key: NOTION_DATABASE_ID
+        value: 2f0e465754d444c88ee493ca30b1ea36
+
+      - key: OPENAI_API_KEY
+        value: your_openai_api_key_here
+
+      - key: OPENAI_MODEL
+        value: gpt5-nano
+
+      - key: APP_HOST
+        value: 0.0.0.0
+
+      - key: APP_PORT
+        value: 8000
+
+      - key: DEBUG
+        value: False
+
+      - key: LOG_LEVEL
+        value: INFO
+
+      - key: TIMEZONE
+        value: America/Sao_Paulo
+
+      - key: AGENT_TEMPERATURE
+        value: 0.7
+
+      - key: AGENT_MAX_ITERATIONS
+        value: 5
+
+      - key: AGENT_MEMORY_KEY
+        value: chat_history

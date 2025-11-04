@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: pangeia-agent
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        sync: false
+      - key: EVOLUTION_API_URL
+        sync: false
+      - key: EVOLUTION_API_KEY
+        sync: false
+      - key: EVOLUTION_INSTANCE_NAME
+        sync: false
+      - key: NOTION_API_KEY
+        sync: false
+      - key: NOTION_DATABASE_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt5-nano
+      - key: APP_HOST
+        value: 0.0.0.0
+      - key: DEBUG
+        value: False
+      - key: LOG_LEVEL
+        value: INFO
+      - key: TIMEZONE
+        value: America/Sao_Paulo

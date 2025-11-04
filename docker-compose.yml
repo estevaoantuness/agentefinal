@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: pangeia_agent
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_INSTANCE_NAME=${EVOLUTION_INSTANCE_NAME}
+      - NOTION_API_KEY=${NOTION_API_KEY}
+      - NOTION_DATABASE_ID=${NOTION_DATABASE_ID}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL}
+      - APP_HOST=${APP_HOST:-0.0.0.0}
+      - APP_PORT=${APP_PORT:-8000}
+      - DEBUG=${DEBUG:-False}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TIMEZONE=${TIMEZONE:-America/Sao_Paulo}
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    depends_on:
+      - db
+    networks:
+      - pangeia_network
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  db:
+    image: postgres:15-alpine
+    container_name: pangeia_db_local
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=pangeia
+      - POSTGRES_PASSWORD=pangeia_local_password
+      - POSTGRES_DB=pangeia_tasks
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - pangeia_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pangeia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  pangeia_network:
+    driver: bridge

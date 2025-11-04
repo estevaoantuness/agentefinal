@@ -1,0 +1,125 @@
+═══════════════════════════════════════════════════════════
+🔐 CREDENCIAIS PARA CONFIGURAR NO RENDER
+═══════════════════════════════════════════════════════════
+
+Cole estas variáveis de ambiente no Render Dashboard:
+(Environment → Add Environment Variable)
+
+═══════════════════════════════════════════════════════════
+
+DATABASE_URL
+postgresql://post_pangeia_user:yblhBhZz3n15SY6kikdYT5SbAekGky26@dpg-d44ll7q4d50c73ejkfrg-a.oregon-postgres.render.com/post_pangeia
+
+EVOLUTION_API_URL
+https://evo.pictorial.cloud
+
+EVOLUTION_API_KEY
+7LjVQc6PJJFFgzy14pzH90QffOOus0z2
+
+EVOLUTION_INSTANCE_NAME
+pangeia_bot
+
+NOTION_API_KEY
+[VEJA O ARQUIVO .env NO SEU COMPUTADOR]
+
+NOTION_DATABASE_ID
+2f0e465754d444c88ee493ca30b1ea36
+
+OPENAI_API_KEY
+[VEJA O ARQUIVO .env NO SEU COMPUTADOR]
+
+OPENAI_MODEL
+gpt5-nano
+
+APP_HOST
+0.0.0.0
+
+APP_PORT
+8000
+
+DEBUG
+False
+
+LOG_LEVEL
+INFO
+
+TIMEZONE
+America/Sao_Paulo
+
+AGENT_TEMPERATURE
+0.7
+
+AGENT_MAX_ITERATIONS
+5
+
+═══════════════════════════════════════════════════════════
+🚀 CONFIGURAÇÕES DO RENDER
+═══════════════════════════════════════════════════════════
+
+Name: pangeia-agent
+
+Environment: Python 3
+
+Region: Oregon (US West)
+
+Branch: main
+
+Build Command:
+pip install -r requirements.txt
+
+Start Command:
+uvicorn src.main:app --host 0.0.0.0 --port $PORT
+
+Health Check Path:
+/health
+
+Auto-Deploy: Yes
+
+═══════════════════════════════════════════════════════════
+📱 CONFIGURAÇÃO DO WEBHOOK (APÓS DEPLOY)
+═══════════════════════════════════════════════════════════
+
+1. Após o deploy, você receberá uma URL como:
+   https://pangeia-agent.onrender.com
+
+2. Configure o webhook no Evolution API Manager:
+   URL: https://evo.pictorial.cloud/manager/
+
+3. Webhook URL para configurar:
+   https://pangeia-agent.onrender.com/webhook/evolution
+
+4. Teste o webhook:
+   https://pangeia-agent.onrender.com/health
+   https://pangeia-agent.onrender.com/webhook/test
+
+═══════════════════════════════════════════════════════════
+✅ VERIFICAÇÃO RÁPIDA
+═══════════════════════════════════════════════════════════
+
+Depois do deploy, acesse:
+https://seu-app.onrender.com/
+
+Deve retornar:
+{
+  "service": "Pangeia Task Manager Agent",
+  "version": "1.0.0",
+  "status": "running"
+}
+
+═══════════════════════════════════════════════════════════
+📊 LINKS IMPORTANTES
+═══════════════════════════════════════════════════════════
+
+Evolution API Manager:
+https://evo.pictorial.cloud/manager/
+
+Notion Database:
+https://www.notion.so/2f0e465754d444c88ee493ca30b1ea36
+
+Render Dashboard:
+https://dashboard.render.com
+
+GitHub Repository:
+https://github.com/estevaoantuness/agentefinal
+
+═══════════════════════════════════════════════════════════

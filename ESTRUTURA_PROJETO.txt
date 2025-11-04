@@ -1,0 +1,115 @@
+agente_pangeia_final/
+│
+├── 📄 Documentação
+│   ├── README.md                    # Documentação principal
+│   ├── SETUP_COMPLETO.md            # Setup completo e detalhado
+│   ├── DEPLOY_RENDER.md             # Guia de deploy no Render
+│   ├── INICIO_RAPIDO.md             # Guia rápido (5 minutos)
+│   └── ESTRUTURA_PROJETO.txt        # Este arquivo
+│
+├── ⚙️ Configuração
+│   ├── .env                         # Variáveis de ambiente (CONFIGURAR!)
+│   ├── .env.example                 # Template de variáveis
+│   ├── .gitignore                   # Arquivos ignorados pelo Git
+│   ├── requirements.txt             # Dependências Python
+│   ├── docker-compose.yml           # Orquestração Docker
+│   ├── Dockerfile                   # Container Docker
+│   └── render.yaml                  # Configuração Render
+│
+├── 📦 src/ (Código-fonte)
+│   ├── main.py                      # 🚀 Aplicação FastAPI principal
+│   │
+│   ├── config/
+│   │   └── settings.py              # Configurações e env vars
+│   │
+│   ├── database/
+│   │   ├── models.py                # 💾 Modelos SQLAlchemy
+│   │   └── session.py               # Gerenciamento de sessão
+│   │
+│   ├── agent/
+│   │   ├── langchain_agent.py       # 🤖 Agent LangChain + GPT5-NANO
+│   │   ├── tools.py                 # 🔧 Tools (CRUD tarefas)
+│   │   └── memory.py                # 🧠 Memória conversacional
+│   │
+│   ├── integrations/
+│   │   ├── evolution_api.py         # 📱 Cliente WhatsApp
+│   │   ├── notion_sync.py           # 📊 Sync Notion (bidirecional)
+│   │   └── scheduler.py             # ⏰ Sistema de lembretes
+│   │
+│   ├── api/
+│   │   └── webhooks.py              # 🔗 Endpoints webhook
+│   │
+│   ├── models/
+│   │   └── schemas.py               # 📋 Schemas Pydantic
+│   │
+│   └── utils/
+│       ├── logger.py                # 📝 Sistema de logs
+│       └── helpers.py               # 🛠️ Funções auxiliares
+│
+├── 🧪 scripts/
+│   ├── init_db.py                   # Inicializar banco de dados
+│   └── test_evolution.py            # Testar Evolution API
+│
+└── 🧪 tests/
+    └── __init__.py                  # Estrutura para testes
+
+═══════════════════════════════════════════════════════════
+
+📊 ESTATÍSTICAS DO PROJETO
+
+Total de arquivos Python: 18
+Total de módulos principais: 13
+Linhas de código: ~2000+
+
+Integrações: 3 (Evolution API, Notion, OpenAI)
+Banco de dados: PostgreSQL (5 tabelas)
+Framework Web: FastAPI
+IA: LangChain + GPT5-NANO
+
+═══════════════════════════════════════════════════════════
+
+🎯 PRINCIPAIS COMPONENTES
+
+1. LangChain Agent (src/agent/)
+   - Processamento de linguagem natural
+   - Memória conversacional persistente
+   - Tools para gestão de tarefas
+   - GPT5-NANO configurado
+
+2. Evolution API Integration (src/integrations/evolution_api.py)
+   - Envio de mensagens WhatsApp
+   - Webhook handler
+   - Gerenciamento de instâncias
+
+3. Notion Sync (src/integrations/notion_sync.py)
+   - Sincronização bidirecional
+   - Criação e atualização de tarefas
+   - Sync automático diário
+
+4. Scheduler (src/integrations/scheduler.py)
+   - APScheduler para lembretes
+   - Agendamento dinâmico
+   - Notificações via WhatsApp
+
+5. Database Models (src/database/models.py)
+   - User, Task, Category, Reminder
+   - ConversationHistory
+   - Relacionamentos SQLAlchemy
+
+═══════════════════════════════════════════════════════════
+
+✅ FUNCIONALIDADES IMPLEMENTADAS
+
+✓ Webhook FastAPI para receber mensagens WhatsApp
+✓ Processamento com IA (LangChain + GPT5-NANO)
+✓ CRUD completo de tarefas
+✓ Sistema de prioridades e categorias
+✓ Lembretes automáticos agendados
+✓ Sincronização bidirecional com Notion
+✓ Memória conversacional persistente
+✓ Logs estruturados (JSON)
+✓ Docker + docker-compose
+✓ Health checks
+✓ Scripts de inicialização e testes
+
+═══════════════════════════════════════════════════════════

@@ -18,7 +18,7 @@ class OpenAIClient:
             raise ValueError("OPENAI_API_KEY not found in environment")
 
         self.client = Groq(api_key=api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'mixtral-8x7b-32768')
+        self.model = os.getenv('OPENAI_MODEL', 'llama-3.1-8b-instant')
         self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '500'))
         self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.7'))
 

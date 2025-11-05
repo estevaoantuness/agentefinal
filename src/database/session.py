@@ -59,5 +59,5 @@ def get_db_context():
 
 def init_db():
     """Initialize database tables."""
-    from src.database.models import User, Task, Reminder, Category
+    from src.database.models import User, Task, Reminder, Category, ConversationHistory
     Base.metadata.create_all(bind=engine)

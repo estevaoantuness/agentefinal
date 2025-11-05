@@ -1,4 +1,5 @@
-"""Webhook handlers for Evolution API."""
+"""Webhook handlers for Evolution API - with OpenAI integration."""
+import json
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from typing import Dict, Any
@@ -9,7 +10,16 @@ from src.utils.logger import logger
 from src.utils.helpers import normalize_phone_number
 from src.integrations.evolution_api import evolution_client
 
+# OpenAI integration
+from src.ai.openai_client import OpenAIClient
+from src.ai.conversation_manager import conversation_manager
+from src.ai.function_definitions import get_function_definitions
+from src.ai.function_executor import function_executor
+
 router = APIRouter()
+
+# Initialize OpenAI client
+openai_client = OpenAIClient()
 
 
 async def process_incoming_message(
@@ -19,7 +29,7 @@ async def process_incoming_message(
     db: Session
 ):
     """
-    Process incoming WhatsApp message in background.
+    Process incoming WhatsApp message with OpenAI.
 
     Args:
         phone_number: Sender phone number
@@ -43,21 +53,15 @@ async def process_incoming_message(
             db.refresh(user)
             logger.info(f"New user created: {normalized_phone}")
 
-        # Import here to avoid circular imports
-        from src.agent.langchain_agent import process_message_with_agent
+        user_id = str(user.id)
 
-        # Process message with LangChain agent
-        response = await process_message_with_agent(
-            user_id=user.id,
-            phone_number=normalized_phone,
-            message=message_text,
-            db=db
-        )
+        # Process with OpenAI
+        response_text = await process_with_openai(user_id, message_text, db)
 
         # Send response via Evolution API
         evolution_client.send_text_message(
             phone_number=phone_number,
-            message=response
+            message=response_text
         )
 
         logger.info(f"Message processed for user {normalized_phone}")
@@ -71,8 +75,76 @@ async def process_incoming_message(
                 phone_number=phone_number,
                 message="Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente mais tarde."
             )
-        except:
-            pass
+        except Exception as inner_e:
+            logger.error(f"Failed to send error message to {phone_number}: {inner_e}")
+
+
+async def process_with_openai(user_id: str, message: str, db: Session) -> str:
+    """
+    Process message with OpenAI and execute functions.
+
+    Args:
+        user_id: User ID
+        message: User message
+        db: Database session
+
+    Returns:
+        Assistant response
+    """
+    try:
+        # Add user message to conversation history
+        conversation_manager.add_message(user_id, "user", message)
+
+        # Get full conversation history
+        messages = conversation_manager.get_or_create_conversation(user_id)
+
+        logger.info(f"Calling OpenAI for user {user_id} with {len(messages)} messages in history")
+
+        # Call OpenAI with function calling
+        response = openai_client.chat_completion(
+            messages=messages,
+            functions=get_function_definitions(),
+            function_call="auto"
+        )
+
+        # Check if OpenAI wants to call a function
+        if response.function_call:
+            function_name = response.function_call.name
+            function_args = json.loads(response.function_call.arguments)
+
+            logger.info(f"OpenAI called function: {function_name}")
+
+            # Execute function
+            function_result = function_executor.execute(
+                function_name,
+                function_args,
+                user_id
+            )
+
+            # Add function result to history
+            conversation_manager.add_function_result(
+                user_id,
+                function_name,
+                function_result
+            )
+
+            # Call OpenAI again for natural response
+            messages = conversation_manager.get_or_create_conversation(user_id)
+            final_response = openai_client.chat_completion(messages=messages)
+
+            response_text = final_response.content
+        else:
+            # Direct response without function call
+            response_text = response.content
+
+        # Add assistant response to history
+        conversation_manager.add_message(user_id, "assistant", response_text)
+
+        return response_text
+
+    except Exception as e:
+        logger.error(f"Error processing with OpenAI: {e}", exc_info=True)
+        return "Desculpe, tive um problema ao processar sua mensagem. Pode tentar novamente?"
 
 
 @router.post("/webhook/evolution")

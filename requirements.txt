@@ -14,8 +14,10 @@ alembic==1.13.1
 langchain==0.1.4
 langchain-openai==0.0.5
 langchain-community==0.0.16
-openai==1.10.0
-tiktoken==0.5.2
+
+# OpenAI (GPT-4o-mini)
+openai==1.54.0
+tiktoken==0.7.0
 
 # Notion Integration
 notion-client==2.2.1

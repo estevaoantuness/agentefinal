@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # OpenAI / LangChain
     OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-4-turbo-preview"
+    OPENAI_MODEL: str = "gpt-3.5-turbo"
 
     # Application
     APP_HOST: str = "0.0.0.0"

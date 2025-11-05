@@ -126,8 +126,8 @@ class NotionSync:
         if date_prop and date_prop.get("start"):
             try:
                 due_date = datetime.fromisoformat(date_prop["start"].replace("Z", "+00:00"))
-            except:
-                pass
+            except ValueError as e:
+                logger.warning(f"Failed to parse date from Notion: {e}")
 
         return {
             "title": title,

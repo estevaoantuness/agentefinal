@@ -57,19 +57,32 @@ class FunctionExecutor:
     def _view_tasks(self, user_id: str, arguments: Dict) -> str:
         """Execute view_tasks."""
         try:
-            filter_status = arguments.get('filter_status', 'all')
-
-            # Import here to avoid circular imports
-            from src.agent.tools import list_tasks_tool
             from src.database.session import SessionLocal
+            from src.database.models import Task, TaskStatus
 
             db = SessionLocal()
             try:
-                tool = list_tasks_tool(int(user_id), db)
-                result = tool.func(filter_status)
+                filter_status = arguments.get('filter_status', 'all')
+                query = db.query(Task).filter(Task.user_id == int(user_id))
+
+                if filter_status != 'all':
+                    query = query.filter(Task.status == TaskStatus[filter_status.upper()])
+
+                tasks = query.all()
+
+                if not tasks:
+                    return json.dumps({
+                        "success": True,
+                        "data": "You have no tasks yet. Create one with 'criar tarefa'!"
+                    })
+
+                task_list = []
+                for i, task in enumerate(tasks, 1):
+                    task_list.append(f"{i}. {task.title} ({task.status.value})")
+
                 return json.dumps({
                     "success": True,
-                    "data": result
+                    "data": "\n".join(task_list)
                 })
             finally:
                 db.close()
@@ -84,10 +97,13 @@ class FunctionExecutor:
     def _create_task(self, user_id: str, arguments: Dict) -> str:
         """Execute create_task."""
         try:
+            from src.database.session import SessionLocal
+            from src.database.models import Task, TaskStatus, TaskPriority
+            from datetime import datetime
+
             title = arguments.get('title', '')
             description = arguments.get('description', '')
             priority = arguments.get('priority', 'medium')
-            due_date = arguments.get('due_date', '')
 
             if not title:
                 return json.dumps({
@@ -95,18 +111,22 @@ class FunctionExecutor:
                     "error": "Task title is required"
                 })
 
-            # Import here to avoid circular imports
-            from src.agent.tools import create_task_tool
-            from src.database.session import SessionLocal
-
             db = SessionLocal()
             try:
-                tool = create_task_tool(int(user_id), db)
-                input_str = f"{title}|{description}|{priority}|{due_date}"
-                result = tool.func(input_str)
+                # Create new task
+                task = Task(
+                    user_id=int(user_id),
+                    title=title,
+                    description=description,
+                    status=TaskStatus.PENDING,
+                    priority=TaskPriority[priority.upper()] if priority else TaskPriority.MEDIUM
+                )
+                db.add(task)
+                db.commit()
+
                 return json.dumps({
                     "success": True,
-                    "data": result
+                    "data": f"✅ Task '{title}' created successfully!"
                 })
             finally:
                 db.close()
@@ -121,6 +141,9 @@ class FunctionExecutor:
     def _mark_done(self, user_id: str, arguments: Dict) -> str:
         """Execute mark_done."""
         try:
+            from src.database.session import SessionLocal
+            from src.database.models import Task, TaskStatus
+
             task_numbers = arguments.get('task_numbers', [])
 
             if not task_numbers:
@@ -129,22 +152,24 @@ class FunctionExecutor:
                     "error": "No task numbers provided"
                 })
 
-            # Import here to avoid circular imports
-            from src.agent.tools import update_task_tool
-            from src.database.session import SessionLocal
-
             db = SessionLocal()
             try:
-                tool = update_task_tool(int(user_id), db)
+                # Get all tasks for user in order
+                tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
                 results = []
+
                 for task_num in task_numbers:
-                    input_str = f"{task_num}|status|completed"
-                    result = tool.func(input_str)
-                    results.append(result)
+                    if 0 < task_num <= len(tasks):
+                        task = tasks[task_num - 1]
+                        task.status = TaskStatus.COMPLETED
+                        db.commit()
+                        results.append(f"✅ Task '{task.title}' marked as completed")
+                    else:
+                        results.append(f"❌ Task {task_num} not found")
 
                 return json.dumps({
                     "success": True,
-                    "data": " ".join(results)
+                    "data": "\n".join(results)
                 })
             finally:
                 db.close()
@@ -159,6 +184,9 @@ class FunctionExecutor:
     def _mark_progress(self, user_id: str, arguments: Dict) -> str:
         """Execute mark_progress."""
         try:
+            from src.database.session import SessionLocal
+            from src.database.models import Task, TaskStatus
+
             task_numbers = arguments.get('task_numbers', [])
 
             if not task_numbers:
@@ -167,22 +195,24 @@ class FunctionExecutor:
                     "error": "No task numbers provided"
                 })
 
-            # Import here to avoid circular imports
-            from src.agent.tools import update_task_tool
-            from src.database.session import SessionLocal
-
             db = SessionLocal()
             try:
-                tool = update_task_tool(int(user_id), db)
+                # Get all tasks for user in order
+                tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
                 results = []
+
                 for task_num in task_numbers:
-                    input_str = f"{task_num}|status|in_progress"
-                    result = tool.func(input_str)
-                    results.append(result)
+                    if 0 < task_num <= len(tasks):
+                        task = tasks[task_num - 1]
+                        task.status = TaskStatus.IN_PROGRESS
+                        db.commit()
+                        results.append(f"⏳ Task '{task.title}' marked as in progress")
+                    else:
+                        results.append(f"❌ Task {task_num} not found")
 
                 return json.dumps({
                     "success": True,
-                    "data": " ".join(results)
+                    "data": "\n".join(results)
                 })
             finally:
                 db.close()

@@ -1,28 +1,28 @@
-"""OpenAI Client with retry logic and token counting."""
+"""Groq Client with retry logic and token counting."""
 import os
 import json
 import time
 from typing import List, Dict, Optional
-from openai import OpenAI, APIError, RateLimitError, APIConnectionError
+from groq import Groq, APIError, RateLimitError, APIConnectionError
 
 from src.utils.logger import logger
 
 
 class OpenAIClient:
-    """Client for OpenAI API with error handling."""
+    """Client for Groq API with error handling (compatible with OpenAI interface)."""
 
     def __init__(self):
-        """Initialize OpenAI client."""
+        """Initialize Groq client."""
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
 
-        self.client = OpenAI(api_key=api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+        self.client = Groq(api_key=api_key)
+        self.model = os.getenv('OPENAI_MODEL', 'mixtral-8x7b-32768')
         self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '500'))
         self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.7'))
 
-        logger.info(f"OpenAI Client initialized: model={self.model}")
+        logger.info(f"Groq Client initialized: model={self.model}")
 
     def chat_completion(
         self,
@@ -32,7 +32,7 @@ class OpenAIClient:
         max_retries: int = 3
     ) -> Dict:
         """
-        Call OpenAI Chat Completion with retry logic.
+        Call Groq Chat Completion with retry logic.
 
         Args:
             messages: Message history list
@@ -56,12 +56,12 @@ class OpenAIClient:
                     kwargs['functions'] = functions
                     kwargs['function_call'] = function_call or "auto"
 
-                logger.debug(f"OpenAI request: {len(messages)} messages, model={self.model}")
+                logger.debug(f"Groq request: {len(messages)} messages, model={self.model}")
 
                 response = self.client.chat.completions.create(**kwargs)
 
                 result = response.choices[0].message
-                logger.info(f"OpenAI response received")
+                logger.info(f"Groq response received")
                 return result
 
             except RateLimitError as e:
@@ -72,13 +72,13 @@ class OpenAIClient:
                     raise
 
             except APIConnectionError as e:
-                logger.error(f"Connection error with OpenAI: {e}")
+                logger.error(f"Connection error with Groq: {e}")
                 if attempt == max_retries - 1:
                     raise
                 time.sleep(2)
 
             except APIError as e:
-                logger.error(f"OpenAI API error: {e}")
+                logger.error(f"Groq API error: {e}")
                 raise
 
         raise Exception("Max retries exceeded")

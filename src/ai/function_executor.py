@@ -47,6 +47,12 @@ class FunctionExecutor:
             elif function_name == "check_onboarding_status":
                 return self._check_onboarding_status(user_id)
 
+            elif function_name == "get_notion_tasks":
+                return self._get_notion_tasks(user_id, arguments)
+
+            elif function_name == "update_notion_task_status":
+                return self._update_notion_task_status(user_id, arguments)
+
             else:
                 return json.dumps({
                     "success": False,
@@ -369,6 +375,110 @@ Sempre disponível para ajudar! 🚀
             return json.dumps({
                 "success": False,
                 "error": f"Error checking onboarding status: {str(e)}"
+            })
+
+    def _get_notion_tasks(self, user_id: str, arguments: Dict) -> str:
+        """Get tasks from Notion database for Groq to read and analyze."""
+        try:
+            from src.integrations.notion_tasks import get_notion_task_reader
+
+            # Get format and filters from arguments
+            format_type = arguments.get('format', 'formatted')
+            status_filter = arguments.get('status_filter', 'all')
+
+            task_reader = get_notion_task_reader()
+
+            # Get tasks based on filter
+            if status_filter != 'all':
+                # Map filter names to Notion status format
+                status_map = {
+                    'not_started': 'Not Started',
+                    'in_progress': 'In Progress',
+                    'completed': 'Completed',
+                    'on_hold': 'On Hold',
+                    'blocked': 'Blocked'
+                }
+                status_name = status_map.get(status_filter, 'Not Started')
+                tasks = task_reader.get_tasks_by_status(status_name)
+            else:
+                tasks = task_reader.get_all_tasks()
+
+            # Format response based on requested format
+            if format_type == 'summary':
+                # Return JSON summary for analysis
+                formatted_data = task_reader.format_summary_for_groq(tasks)
+            elif format_type == 'by_status':
+                # Group tasks by status
+                by_status = {}
+                for task in tasks:
+                    status = task.get('status', 'Unknown')
+                    if status not in by_status:
+                        by_status[status] = []
+                    by_status[status].append(task)
+                formatted_data = json.dumps(by_status, ensure_ascii=False, indent=2)
+            else:
+                # Default: formatted readable list
+                formatted_data = task_reader.format_for_groq(tasks)
+
+            logger.info(f"Retrieved {len(tasks)} tasks from Notion")
+            return json.dumps({
+                "success": True,
+                "data": formatted_data,
+                "count": len(tasks)
+            })
+
+        except Exception as e:
+            logger.error(f"Error in get_notion_tasks: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error retrieving tasks from Notion: {str(e)}"
+            })
+
+    def _update_notion_task_status(self, user_id: str, arguments: Dict) -> str:
+        """Update task status in Notion database."""
+        try:
+            from src.integrations.notion_tasks import get_notion_task_reader
+
+            # Get required arguments
+            task_id = arguments.get('task_id')
+            new_status = arguments.get('new_status')
+            update_progress = arguments.get('update_progress')
+
+            if not task_id or not new_status:
+                return json.dumps({
+                    "success": False,
+                    "error": "task_id and new_status are required parameters"
+                })
+
+            task_reader = get_notion_task_reader()
+
+            # Update status
+            status_success = task_reader.update_task_status(task_id, new_status)
+
+            if not status_success:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Could not update task status to '{new_status}'"
+                })
+
+            # Update progress if provided
+            if update_progress is not None:
+                progress_success = task_reader.update_task_progress(task_id, update_progress)
+                progress_msg = f" and progress to {update_progress}%" if progress_success else ""
+            else:
+                progress_msg = ""
+
+            logger.info(f"Updated task {task_id} status to '{new_status}'{progress_msg}")
+            return json.dumps({
+                "success": True,
+                "data": f"✅ Task status updated to '{new_status}'{progress_msg}!"
+            })
+
+        except Exception as e:
+            logger.error(f"Error in update_notion_task_status: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error updating task status: {str(e)}"
             })
 
 

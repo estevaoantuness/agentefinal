@@ -38,8 +38,8 @@
 Run the discovery script to find your exact Notion property names:
 
 ```bash
-export NOTION_API_KEY="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"
-export NOTION_USERS_DATABASE_ID="29ea53b3e53c805c88dde0e2ab9e58b9"
+export NOTION_API_KEY="your_notion_api_key_here"
+export NOTION_USERS_DATABASE_ID="your_database_id_here"
 python scripts/discover_notion_structure.py
 ```
 
@@ -80,8 +80,8 @@ Add to Render dashboard:
 3. Go to **Settings → Environment**
 4. Add these variables:
    ```
-   NOTION_API_KEY=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
-   NOTION_USERS_DATABASE_ID=29ea53b3e53c805c88dde0e2ab9e58b9
+   NOTION_API_KEY=your_notion_api_key_here
+   NOTION_USERS_DATABASE_ID=your_database_id_here
    ```
 5. Click **Save**
 6. Service will automatically restart

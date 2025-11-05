@@ -29,7 +29,7 @@ Your Notion database has specific column names (properties) that we need to find
 1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
 2. Create a new integration or use existing one
 3. Copy your API key (starts with `ntn_`)
-4. You provided: `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`
+4. Save it securely - do not commit to version control
 
 ### 1.2 Get Your Database ID
 
@@ -41,8 +41,8 @@ Extract the ID: `29ea53b3e53c805c88dde0e2ab9e58b9`
 
 ```bash
 # Set environment variables
-export NOTION_API_KEY="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"
-export NOTION_USERS_DATABASE_ID="29ea53b3e53c805c88dde0e2ab9e58b9"
+export NOTION_API_KEY="your_notion_api_key_here"
+export NOTION_USERS_DATABASE_ID="your_database_id_here"
 
 # Run the discovery script
 python scripts/discover_notion_structure.py
@@ -114,8 +114,8 @@ Look for these methods and update property names as needed:
 Add to your Render environment (or local .env):
 
 ```
-NOTION_API_KEY=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
-NOTION_USERS_DATABASE_ID=29ea53b3e53c805c88dde0e2ab9e58b9
+NOTION_API_KEY=your_notion_api_key_here
+NOTION_USERS_DATABASE_ID=your_database_id_here
 ```
 
 ---

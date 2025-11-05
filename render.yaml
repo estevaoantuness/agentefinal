@@ -25,7 +25,7 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: gpt5-nano
+        value: llama-3.1-8b-instant
       - key: APP_HOST
         value: 0.0.0.0
       - key: DEBUG

@@ -17,6 +17,9 @@ from src.ai.conversation_manager import conversation_manager
 from src.ai.function_definitions import get_function_definitions
 from src.ai.function_executor import function_executor
 
+# Notion integration
+from src.integrations.notion_users import notion_user_manager
+
 router = APIRouter()
 
 # Initialize OpenAI client
@@ -60,6 +63,7 @@ async def process_incoming_message(
 
         # Get or create user
         user = db.query(User).filter(User.phone_number == normalized_phone).first()
+        is_new_user = False
         if not user:
             user = User(
                 phone_number=normalized_phone,
@@ -68,7 +72,15 @@ async def process_incoming_message(
             db.add(user)
             db.commit()
             db.refresh(user)
+            is_new_user = True
             logger.info(f"New user created: {normalized_phone}")
+
+            # Sync new user to Notion in background
+            try:
+                notion_user_manager.sync_user_to_notion(user)
+                logger.info(f"User {normalized_phone} synced to Notion")
+            except Exception as e:
+                logger.warning(f"Could not sync user {normalized_phone} to Notion: {e}")
 
         user_id = str(user.id)
 

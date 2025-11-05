@@ -41,6 +41,12 @@ class FunctionExecutor:
             elif function_name == "get_help":
                 return self._get_help()
 
+            elif function_name == "mark_onboarded":
+                return self._mark_onboarded(user_id, arguments)
+
+            elif function_name == "check_onboarding_status":
+                return self._check_onboarding_status(user_id)
+
             else:
                 return json.dumps({
                     "success": False,
@@ -286,6 +292,84 @@ Sempre disponível para ajudar! 🚀
             "success": True,
             "data": help_text
         })
+
+    def _mark_onboarded(self, user_id: str, arguments: Dict) -> str:
+        """Mark user as completed onboarding in Notion."""
+        try:
+            from src.database.session import SessionLocal
+            from src.database.models import User
+            from src.integrations.notion_users import notion_user_manager
+
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if not user:
+                    return json.dumps({
+                        "success": False,
+                        "error": "User not found"
+                    })
+
+                # Mark onboarding complete in Notion
+                success = notion_user_manager.mark_onboarding_complete(user.phone_number)
+
+                if success:
+                    return json.dumps({
+                        "success": True,
+                        "data": "✅ Onboarding completed and recorded in Notion!"
+                    })
+                else:
+                    return json.dumps({
+                        "success": False,
+                        "error": "Could not record onboarding in Notion"
+                    })
+            finally:
+                db.close()
+
+        except Exception as e:
+            logger.error(f"Error in mark_onboarded: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error marking onboarding: {str(e)}"
+            })
+
+    def _check_onboarding_status(self, user_id: str) -> str:
+        """Check if user has completed onboarding in Notion."""
+        try:
+            from src.database.session import SessionLocal
+            from src.database.models import User
+            from src.integrations.notion_users import notion_user_manager
+
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if not user:
+                    return json.dumps({
+                        "success": False,
+                        "error": "User not found"
+                    })
+
+                # Check onboarding status in Notion
+                is_onboarded = notion_user_manager.get_onboarding_status(user.phone_number)
+
+                if is_onboarded:
+                    return json.dumps({
+                        "success": True,
+                        "data": "✅ You have already completed onboarding!"
+                    })
+                else:
+                    return json.dumps({
+                        "success": True,
+                        "data": "⏳ You haven't completed onboarding yet. Let's start!"
+                    })
+            finally:
+                db.close()
+
+        except Exception as e:
+            logger.error(f"Error in check_onboarding_status: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error checking onboarding status: {str(e)}"
+            })
 
 
 # Global instance

@@ -102,6 +102,28 @@ FUNCTION_DEFINITIONS = [
                 "properties": {}
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mark_onboarded",
+            "description": "Mark the user as completed onboarding and record it in Notion database",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_onboarding_status",
+            "description": "Check if the user has completed onboarding in the Notion database",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
     }
 ]
 

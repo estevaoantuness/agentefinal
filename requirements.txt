@@ -17,7 +17,7 @@ langchain-community==0.0.16
 
 # OpenAI (GPT-4o-mini)
 openai==1.54.0
-tiktoken==0.7.0
+tiktoken==0.5.2
 
 # Notion Integration
 notion-client==2.2.1

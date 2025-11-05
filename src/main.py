@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from src.config.settings import settings
 from src.api.webhooks import router as webhook_router
 from src.database.session import init_db
-from src.integrations.scheduler import reminder_scheduler
 from src.utils.logger import logger
 
 
@@ -26,27 +25,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
 
-    # Load pending reminders
-    try:
-        reminder_scheduler.load_pending_reminders()
-        logger.info("Pending reminders loaded")
-    except Exception as e:
-        logger.error(f"Failed to load reminders: {e}")
-
-    # Schedule daily Notion sync
-    try:
-        reminder_scheduler.schedule_daily_sync()
-        logger.info("Daily sync scheduled")
-    except Exception as e:
-        logger.error(f"Failed to schedule daily sync: {e}")
-
     logger.info(f"Pangeia Agent started on {settings.APP_HOST}:{settings.APP_PORT}")
 
     yield
 
     # Shutdown
     logger.info("Shutting down Pangeia Agent...")
-    reminder_scheduler.shutdown()
     logger.info("Pangeia Agent stopped")
 
 

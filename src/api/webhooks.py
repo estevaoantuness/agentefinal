@@ -1,5 +1,6 @@
 """Webhook handlers for Evolution API - with OpenAI integration."""
 import json
+import re
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from typing import Dict, Any
@@ -20,6 +21,22 @@ router = APIRouter()
 
 # Initialize OpenAI client
 openai_client = OpenAIClient()
+
+
+def clean_response_text(text: str) -> str:
+    """
+    Clean response text by removing function call tags.
+
+    Args:
+        text: Raw response text
+
+    Returns:
+        Cleaned response text
+    """
+    # Remove <function=...></function> tags
+    cleaned = re.sub(r'<function=.*?></function>', '', text, flags=re.DOTALL)
+    # Strip extra whitespace
+    return cleaned.strip()
 
 
 async def process_incoming_message(
@@ -132,10 +149,10 @@ async def process_with_openai(user_id: str, message: str, db: Session) -> str:
             messages = conversation_manager.get_or_create_conversation(user_id)
             final_response = openai_client.chat_completion(messages=messages)
 
-            response_text = final_response.content
+            response_text = clean_response_text(final_response.content)
         else:
             # Direct response without function call
-            response_text = response.content
+            response_text = clean_response_text(response.content)
 
         # Add assistant response to history
         conversation_manager.add_message(user_id, "assistant", response_text)

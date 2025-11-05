@@ -14,8 +14,7 @@ FUNCTION_DEFINITIONS = [
                         "enum": ["all", "pending", "in_progress", "completed"],
                         "description": "Filter by specific status (default: all)"
                     }
-                },
-                "required": []
+                }
             }
         }
     },

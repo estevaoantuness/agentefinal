@@ -21,7 +21,9 @@ class Settings(BaseSettings):
 
     # OpenAI / LangChain
     OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-3.5-turbo"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MAX_TOKENS: int = 500
+    OPENAI_TEMPERATURE: float = 0.7
 
     # Application
     APP_HOST: str = "0.0.0.0"

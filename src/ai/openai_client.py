@@ -53,8 +53,10 @@ class OpenAIClient:
                 }
 
                 if functions:
-                    kwargs['functions'] = functions
-                    kwargs['function_call'] = function_call or "auto"
+                    # Groq expects tools parameter instead of functions
+                    kwargs['tools'] = functions
+                    if function_call:
+                        kwargs['tool_choice'] = {"type": "auto"}
 
                 logger.debug(f"Groq request: {len(messages)} messages, model={self.model}")
 

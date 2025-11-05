@@ -124,12 +124,13 @@ async def process_with_openai(user_id: str, message: str, db: Session) -> str:
             function_call="auto"
         )
 
-        # Check if OpenAI wants to call a function
-        if response.function_call:
-            function_name = response.function_call.name
-            function_args = json.loads(response.function_call.arguments)
+        # Check if Groq wants to call a function (tool_calls)
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            tool_call = response.tool_calls[0]
+            function_name = tool_call.function.name
+            function_args = json.loads(tool_call.function.arguments)
 
-            logger.info(f"OpenAI called function: {function_name}")
+            logger.info(f"Groq called function: {function_name}")
 
             # Execute function
             function_result = function_executor.execute(
@@ -145,7 +146,7 @@ async def process_with_openai(user_id: str, message: str, db: Session) -> str:
                 function_result
             )
 
-            # Call OpenAI again for natural response
+            # Call Groq again for natural response
             messages = conversation_manager.get_or_create_conversation(user_id)
             final_response = openai_client.chat_completion(messages=messages)
 

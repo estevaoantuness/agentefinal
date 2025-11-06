@@ -20,6 +20,9 @@ from src.ai.function_executor import function_executor
 # Notion integration
 from src.integrations.notion_users import notion_user_manager
 
+# Command matcher for reliable command detection
+from src.ai.command_matcher import command_matcher
+
 router = APIRouter()
 
 # Initialize OpenAI client
@@ -28,7 +31,12 @@ openai_client = OpenAIClient()
 
 def clean_response_text(text: str) -> str:
     """
-    Clean response text by removing function call tags.
+    Clean response text by removing function call tags and markers.
+
+    Handles multiple formats:
+    - <function=...></function>
+    - =function_name>{...}
+    - <function_name>
 
     Args:
         text: Raw response text
@@ -36,10 +44,62 @@ def clean_response_text(text: str) -> str:
     Returns:
         Cleaned response text
     """
-    # Remove <function=...></function> tags
+    if not text:
+        return ""
+
+    # Remove XML-style function tags: <function=...></function>
     cleaned = re.sub(r'<function=.*?></function>', '', text, flags=re.DOTALL)
+
+    # Remove arrow-style function calls: =function_name>{...}
+    cleaned = re.sub(r'=\w+>\{[^}]*\}', '', cleaned)
+
+    # Remove simple angle bracket function markers: <function_name>
+    cleaned = re.sub(r'<\w+>', '', cleaned)
+
     # Strip extra whitespace
     return cleaned.strip()
+
+
+def parse_text_function_call(text: str) -> Optional[Dict]:
+    """
+    Parse text-based function calls when tool_calls is not available.
+
+    Formats supported:
+    - =function_name>{"arg": "value"}
+    - <function=function_name>{"arg": "value"}</function>
+
+    Args:
+        text: Response text potentially containing function calls
+
+    Returns:
+        Dict with 'name' and 'arguments' or None if no match
+    """
+    if not text:
+        return None
+
+    # Try arrow format: =function_name>{...}
+    arrow_match = re.search(r'=(\w+)>(\{[^}]*\})', text)
+    if arrow_match:
+        try:
+            return {
+                'name': arrow_match.group(1),
+                'arguments': arrow_match.group(2)
+            }
+        except Exception as e:
+            logger.warning(f"Error parsing arrow-format function call: {e}")
+
+    # Try XML format: <function=name>args</function>
+    xml_match = re.search(r'<function=(\w+)>(.*?)</function>', text, re.DOTALL)
+    if xml_match:
+        try:
+            return {
+                'name': xml_match.group(1),
+                'arguments': xml_match.group(2).strip()
+            }
+        except Exception as e:
+            logger.warning(f"Error parsing XML-format function call: {e}")
+
+    return None
 
 
 async def process_incoming_message(
@@ -84,8 +144,8 @@ async def process_incoming_message(
 
         user_id = str(user.id)
 
-        # Process with OpenAI
-        response_text = await process_with_openai(user_id, message_text, db)
+        # Process with OpenAI - pass user name for personalization
+        response_text = await process_with_openai(user_id, message_text, db, user_name=user.name)
 
         # Send response via Evolution API
         evolution_client.send_text_message(
@@ -108,7 +168,7 @@ async def process_incoming_message(
             logger.error(f"Failed to send error message to {phone_number}: {inner_e}")
 
 
-async def process_with_openai(user_id: str, message: str, db: Session) -> str:
+async def process_with_openai(user_id: str, message: str, db: Session, user_name: str = None) -> str:
     """
     Process message with OpenAI and execute functions.
 
@@ -116,16 +176,52 @@ async def process_with_openai(user_id: str, message: str, db: Session) -> str:
         user_id: User ID
         message: User message
         db: Database session
+        user_name: User's name for personalization
 
     Returns:
         Assistant response
     """
     try:
-        # Add user message to conversation history
+        # === PHASE 1: Try reliable command matching FIRST ===
+        command_match = command_matcher.match(message)
+
+        if command_match and command_match.get('confidence') == 'high':
+            # Direct function execution for high-confidence matches
+            logger.info(f"Direct command match: {command_match['function']}")
+
+            function_result = function_executor.execute(
+                command_match['function'],
+                command_match['arguments'],
+                user_id
+            )
+
+            # Parse function result
+            result_data = json.loads(function_result)
+
+            if result_data.get('success'):
+                # Add to conversation history
+                conversation_manager.add_message(user_id, "user", message)
+                conversation_manager.add_function_result(
+                    user_id,
+                    command_match['function'],
+                    function_result
+                )
+
+                # Get natural language response from LLM
+                messages = conversation_manager.get_or_create_conversation(user_id, user_name=user_name)
+                response = openai_client.chat_completion(messages=messages)
+                response_text = clean_response_text(response.content)
+                conversation_manager.add_message(user_id, "assistant", response_text)
+                return response_text
+            else:
+                # Function failed, fall through to LLM
+                logger.warning(f"Command execution failed: {result_data.get('error')}")
+
+        # === PHASE 2: Use LLM with fallback function call parsing ===
         conversation_manager.add_message(user_id, "user", message)
 
-        # Get full conversation history
-        messages = conversation_manager.get_or_create_conversation(user_id)
+        # Get conversation history with personalization
+        messages = conversation_manager.get_or_create_conversation(user_id, user_name)
 
         logger.info(f"Calling OpenAI for user {user_id} with {len(messages)} messages in history")
 
@@ -136,35 +232,49 @@ async def process_with_openai(user_id: str, message: str, db: Session) -> str:
             function_call="auto"
         )
 
+        # Variable to track if function was executed
+        function_name = None
+        function_args = None
+
         # Check if Groq wants to call a function (tool_calls)
         if hasattr(response, 'tool_calls') and response.tool_calls:
+            # Standard tool_calls format
             tool_call = response.tool_calls[0]
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
+            logger.info(f"Groq called function via tool_calls: {function_name}")
 
-            logger.info(f"Groq called function: {function_name}")
+        elif response.content:
+            # Fallback: Check for text-based function calls
+            text_call = parse_text_function_call(response.content)
+            if text_call:
+                function_name = text_call['name']
+                try:
+                    function_args = json.loads(text_call['arguments'])
+                    logger.info(f"Groq called function via text format: {function_name}")
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse function args: {text_call['arguments']}")
 
-            # Execute function
+        # Execute function if found
+        if function_name and function_args:
             function_result = function_executor.execute(
                 function_name,
                 function_args,
                 user_id
             )
 
-            # Add function result to history
             conversation_manager.add_function_result(
                 user_id,
                 function_name,
                 function_result
             )
 
-            # Call Groq again for natural response
-            messages = conversation_manager.get_or_create_conversation(user_id)
+            # Get natural response
+            messages = conversation_manager.get_or_create_conversation(user_id, user_name=user_name)
             final_response = openai_client.chat_completion(messages=messages)
-
             response_text = clean_response_text(final_response.content)
         else:
-            # Direct response without function call
+            # Direct response - but clean function call leakage
             response_text = clean_response_text(response.content)
 
         # Add assistant response to history

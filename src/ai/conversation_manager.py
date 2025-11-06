@@ -21,12 +21,13 @@ class ConversationManager:
         self.max_messages = max_messages
         self.timeout_minutes = timeout_minutes
 
-    def get_or_create_conversation(self, user_id: str) -> List[Dict[str, str]]:
+    def get_or_create_conversation(self, user_id: str, user_name: str = None) -> List[Dict[str, str]]:
         """
         Get user conversation history or create new one.
 
         Args:
             user_id: User ID
+            user_name: User's name for personalization (optional)
 
         Returns:
             List of message objects
@@ -42,10 +43,10 @@ class ConversationManager:
             else:
                 logger.info(f"Conversation expired for {user_id}, creating new one")
 
-        # Create new conversation with system prompt
+        # Create new conversation with personalized system prompt
         self.conversations[user_id] = {
             'messages': [
-                {"role": "system", "content": get_system_prompt()}
+                {"role": "system", "content": get_system_prompt(user_name=user_name)}
             ],
             'last_activity': datetime.now()
         }

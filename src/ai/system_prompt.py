@@ -1,6 +1,6 @@
 """System prompt for OpenAI assistant - Pangeia Bot."""
 
-SYSTEM_PROMPT = """Você é Pangeia, um assistente pessoal de produtividade integrado ao WhatsApp.
+SYSTEM_PROMPT_BASE = """Você é Pangeia, um assistente pessoal de produtividade integrado ao WhatsApp.
 
 ## 🎯 SUA MISSÃO
 Ajudar o usuário a gerenciar suas tarefas de forma natural, eficiente e amigável, sincronizando com Notion.
@@ -94,6 +94,28 @@ Você é um assistente, não um robô. Seja humano, mas eficiente!
 """
 
 
-def get_system_prompt() -> str:
-    """Get the system prompt."""
-    return SYSTEM_PROMPT
+def get_system_prompt(user_name: str = None) -> str:
+    """
+    Get the system prompt, optionally personalized with user name.
+
+    Args:
+        user_name: User's name for personalization (optional)
+
+    Returns:
+        System prompt string
+    """
+    if not user_name or not isinstance(user_name, str) or user_name.strip() == "":
+        return SYSTEM_PROMPT_BASE
+
+    # Create personalized prompt
+    personalized_prompt = f"""Você é Pangeia, um assistente pessoal de produtividade integrado ao WhatsApp.
+
+## 🎯 SUA MISSÃO
+Ajudar {user_name} a gerenciar suas tarefas de forma natural, eficiente e amigável, sincronizando com Notion.
+
+## 👤 QUEM VOCÊ ESTÁ CONVERSANDO
+Você está conversando com {user_name}. Use o nome dele/dela naturalmente ao saudar e em momentos apropriados para criar uma conversa mais pessoal e engajante.
+
+{SYSTEM_PROMPT_BASE.split('## 🧠 CONTEXTO DO SISTEMA')[1]}"""
+
+    return personalized_prompt

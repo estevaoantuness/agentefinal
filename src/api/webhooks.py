@@ -236,13 +236,13 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
         function_name = None
         function_args = None
 
-        # Check if Groq wants to call a function (tool_calls)
+        # Check if OpenAI wants to call a function (tool_calls)
         if hasattr(response, 'tool_calls') and response.tool_calls:
             # Standard tool_calls format
             tool_call = response.tool_calls[0]
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
-            logger.info(f"Groq called function via tool_calls: {function_name}")
+            logger.info(f"OpenAI called function via tool_calls: {function_name}")
 
         elif response.content:
             # Fallback: Check for text-based function calls
@@ -251,7 +251,7 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                 function_name = text_call['name']
                 try:
                     function_args = json.loads(text_call['arguments'])
-                    logger.info(f"Groq called function via text format: {function_name}")
+                    logger.info(f"OpenAI called function via text format: {function_name}")
                 except json.JSONDecodeError:
                     logger.error(f"Failed to parse function args: {text_call['arguments']}")
 

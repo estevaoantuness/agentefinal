@@ -1,29 +1,33 @@
-"""Groq Client with retry logic and token counting."""
+"""OpenAI Client - MAIN LLM for text processing.
+
+This is the PRIMARY client for text generation.
+Groq is ONLY for audio processing, NOT for text.
+"""
+
 import os
 import json
 import time
 from typing import List, Dict, Optional
-from groq import Groq, APIError, RateLimitError, APIConnectionError
+from openai import OpenAI, RateLimitError, APIConnectionError, APIError
 
 from src.utils.logger import logger
 
 
 class OpenAIClient:
-    """Client for Groq API with error handling (compatible with OpenAI interface)."""
+    """OpenAI Client for GPT-4o-mini (PRIMARY text processor)."""
 
     def __init__(self):
-        """Initialize Groq client."""
-        # Tenta GROQ_API_KEY primeiro (recomendado), depois OPENAI_API_KEY (fallback)
-        api_key = os.getenv('GROQ_API_KEY') or os.getenv('OPENAI_API_KEY')
+        """Initialize OpenAI client."""
+        api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
-            raise ValueError("GROQ_API_KEY ou OPENAI_API_KEY não encontrada no ambiente")
+            raise ValueError("OPENAI_API_KEY not found in environment")
 
-        self.client = Groq(api_key=api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'llama-3.1-8b-instant')
+        self.client = OpenAI(api_key=api_key)
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
         self.max_tokens = int(os.getenv('OPENAI_MAX_TOKENS', '500'))
         self.temperature = float(os.getenv('OPENAI_TEMPERATURE', '0.7'))
 
-        logger.info(f"Groq Client initialized: model={self.model}")
+        logger.info(f"OpenAI Client initialized: model={self.model}")
 
     def chat_completion(
         self,
@@ -33,7 +37,7 @@ class OpenAIClient:
         max_retries: int = 3
     ) -> Dict:
         """
-        Call Groq Chat Completion with retry logic.
+        Call OpenAI Chat Completion with retry logic.
 
         Args:
             messages: Message history list
@@ -54,54 +58,34 @@ class OpenAIClient:
                 }
 
                 if functions:
-                    # Groq expects tools parameter instead of functions
-                    kwargs['tools'] = functions
-                    # tool_choice must be a string: "auto" or "none"
+                    # OpenAI uses tools parameter
+                    kwargs['tools'] = [{'type': 'function', 'function': f} for f in functions]
                     if function_call:
                         kwargs['tool_choice'] = "auto"
 
-                logger.debug(f"Groq request: {len(messages)} messages, model={self.model}")
+                logger.debug(f"OpenAI request: {len(messages)} messages, model={self.model}")
 
                 response = self.client.chat.completions.create(**kwargs)
 
                 result = response.choices[0].message
-                logger.info(f"Groq response received")
+                logger.info(f"OpenAI response received (tokens: {response.usage.total_tokens})")
                 return result
 
             except RateLimitError as e:
                 wait_time = 2 ** attempt  # Exponential backoff
-                logger.warning(f"Rate limit hit. Waiting {wait_time}s... (attempt {attempt + 1}/{max_retries})")
+                logger.warning(f"OpenAI rate limit hit. Waiting {wait_time}s... (attempt {attempt + 1}/{max_retries})")
                 time.sleep(wait_time)
                 if attempt == max_retries - 1:
                     raise
 
             except APIConnectionError as e:
-                logger.error(f"Connection error with Groq: {e}")
+                logger.error(f"Connection error with OpenAI: {e}")
                 if attempt == max_retries - 1:
                     raise
-                time.sleep(2)
 
             except APIError as e:
-                logger.error(f"Groq API error: {e}")
-                raise
+                logger.error(f"OpenAI API error: {e}")
+                if attempt == max_retries - 1:
+                    raise
 
-        raise Exception("Max retries exceeded")
-
-    def count_tokens(self, text: str) -> int:
-        """
-        Count tokens in text.
-
-        Args:
-            text: Text to count tokens for
-
-        Returns:
-            Number of tokens
-        """
-        try:
-            import tiktoken
-            encoding = tiktoken.encoding_for_model(self.model)
-            return len(encoding.encode(text))
-        except Exception as e:
-            logger.warning(f"Could not count tokens: {e}")
-            # Rough estimate: 1 token ≈ 4 characters
-            return len(text) // 4
+        raise RuntimeError(f"Failed to get response from OpenAI after {max_retries} attempts")

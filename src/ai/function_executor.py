@@ -3,6 +3,7 @@ import json
 from typing import Dict, Any
 
 from src.utils.logger import logger
+from src.integrations.notion_tasks import get_notion_task_reader
 
 
 class FunctionExecutor:
@@ -395,8 +396,6 @@ Sempre disponível para ajudar! 🚀
     def _get_notion_tasks(self, user_id: str, arguments: Dict) -> str:
         """Get tasks from Notion database for Groq to read and analyze."""
         try:
-            from src.integrations.notion_tasks import get_notion_task_reader
-
             # Get format and filters from arguments
             format_type = arguments.get('format', 'formatted')
             status_filter = arguments.get('status_filter', 'all')
@@ -420,8 +419,73 @@ Sempre disponível para ajudar! 🚀
 
             # Format response based on requested format
             if format_type == 'summary':
-                # Return JSON summary for analysis
+                # Return JSON summary for analysis, but ensure consistency with current tasks
                 formatted_data = task_reader.format_summary_for_groq(tasks)
+
+                def _build_summary(task_list):
+                    summary = {
+                        "total_tasks": len(task_list),
+                        "by_status": {},
+                        "by_priority": {},
+                        "average_progress": 0,
+                        "tasks": []
+                    }
+                    total_progress = 0
+
+                    for task in task_list:
+                        status = task.get('status', 'Unknown')
+                        summary["by_status"][status] = summary["by_status"].get(status, 0) + 1
+
+                        priority = task.get('priority', 'Unknown')
+                        summary["by_priority"][priority] = summary["by_priority"].get(priority, 0) + 1
+
+                        progress = task.get('progress', 0) or 0
+                        total_progress += progress
+
+                        summary["tasks"].append({
+                            "id": task.get('id'),
+                            "title": task.get('title'),
+                            "status": status,
+                            "priority": priority,
+                            "progress": progress
+                        })
+
+                    if task_list:
+                        summary["average_progress"] = round(total_progress / len(task_list), 2)
+
+                    return summary
+
+                expected_summary = _build_summary(tasks)
+
+                try:
+                    summary_payload = (
+                        json.loads(formatted_data)
+                        if isinstance(formatted_data, str)
+                        else formatted_data
+                    )
+                except (TypeError, ValueError):
+                    summary_payload = None
+
+                if not isinstance(summary_payload, dict):
+                    formatted_data = json.dumps(expected_summary, ensure_ascii=False, indent=2)
+                else:
+                    # Overwrite/merge ensuring current tasks and metadata are accurate
+                    summary_payload['total_tasks'] = expected_summary['total_tasks']
+                    summary_payload['by_status'] = expected_summary['by_status']
+                    summary_payload['by_priority'] = expected_summary['by_priority']
+                    summary_payload['average_progress'] = expected_summary['average_progress']
+
+                    existing_tasks = summary_payload.get('tasks') or []
+                    if len(existing_tasks) != len(expected_summary['tasks']):
+                        summary_payload['tasks'] = expected_summary['tasks']
+                    else:
+                        for idx, task_entry in enumerate(existing_tasks):
+                            expected_entry = expected_summary['tasks'][idx]
+                            for key, value in expected_entry.items():
+                                if key not in task_entry or task_entry[key] in (None, ''):
+                                    task_entry[key] = value
+
+                    formatted_data = json.dumps(summary_payload, ensure_ascii=False, indent=2)
             elif format_type == 'by_status':
                 # Group tasks by status
                 by_status = {}
@@ -452,8 +516,6 @@ Sempre disponível para ajudar! 🚀
     def _update_notion_task_status(self, user_id: str, arguments: Dict) -> str:
         """Update task status in Notion database."""
         try:
-            from src.integrations.notion_tasks import get_notion_task_reader
-
             # Get required arguments
             task_id = arguments.get('task_id')
             new_status = arguments.get('new_status')

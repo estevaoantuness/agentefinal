@@ -3,7 +3,7 @@ import json
 import re
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from src.database.session import get_db
 from src.database.models import User
@@ -26,6 +26,88 @@ router = APIRouter()
 
 # Initialize OpenAI client
 openai_client = OpenAIClient()
+
+# Emoji handling
+EMOJI_REGEX = re.compile(
+    r'[\U0001F1E0-\U0001F1FF\U0001F300-\U0001F5FF'
+    r'\U0001F600-\U0001F64F\U0001F680-\U0001F6FF'
+    r'\U0001F700-\U0001F77F\U0001F780-\U0001F7FF'
+    r'\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF'
+    r'\U0001FA00-\U0001FA6F\u2600-\u26FF\u2700-\u27BF\uFE0F]'
+)
+GREETING_KEYWORDS = (
+    "oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "hey",
+    "hello", "hi", "e ai", "e aí", "salve", "opa"
+)
+
+
+def extract_emojis(text: str) -> List[str]:
+    """Return list of emojis present in text."""
+    if not text:
+        return []
+    return EMOJI_REGEX.findall(text)
+
+
+def is_greeting_message(text: str) -> bool:
+    """Determine if the message is a greeting."""
+    if not text:
+        return False
+
+    normalized = text.lower().strip()
+    if not normalized:
+        return False
+
+    # Consider only first sentence/line for greeting detection
+    first_segment = re.split(r'[.!?\n]', normalized, maxsplit=1)[0].strip()
+
+    for keyword in GREETING_KEYWORDS:
+        if first_segment.startswith(keyword):
+            return True
+    return False
+
+
+def enforce_emoji_policy(user_id: str, text: str) -> str:
+    """
+    Enforce emoji usage rules:
+    - 😊 allowed only for greetings
+    - Prevent reuse of same emoji within the last 20 assistant messages
+    """
+    if not text:
+        return text
+
+    emojis_in_text = extract_emojis(text)
+    if not emojis_in_text:
+        return text
+
+    messages = conversation_manager.get_or_create_conversation(user_id)
+    recent_emoji_set = set()
+
+    for message in reversed(messages[-20:]):
+        if message.get("role") == "assistant":
+            recent_emoji_set.update(extract_emojis(message.get("content", "")))
+
+    greeting_allowed = is_greeting_message(text)
+    used_in_response = set()
+    result_chars = []
+
+    for char in text:
+        if EMOJI_REGEX.fullmatch(char):
+            # Enforce greeting-only rule for 😊
+            if char == "😊" and not greeting_allowed:
+                continue
+            # Avoid reusing emoji from recent context or within same message
+            if char in recent_emoji_set or char in used_in_response:
+                continue
+            used_in_response.add(char)
+            result_chars.append(char)
+        else:
+            result_chars.append(char)
+
+    sanitized = ''.join(result_chars)
+    sanitized = re.sub(r' {2,}', ' ', sanitized)
+    sanitized = re.sub(r'\n{3,}', '\n\n', sanitized)
+
+    return sanitized.strip()
 
 
 def clean_response_text(text: str) -> str:
@@ -230,6 +312,7 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                     user_name=user_name
                 )
                 response_text = clean_response_text(response.get('content', ''))
+                response_text = enforce_emoji_policy(user_id, response_text)
                 conversation_manager.add_message(user_id, "assistant", response_text)
                 return response_text
             else:
@@ -324,9 +407,11 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                 user_name=user_name
             )
             response_text = clean_response_text(final_response.get('content', ''))
+            response_text = enforce_emoji_policy(user_id, response_text)
         else:
             # Direct response - but clean function call leakage
             response_text = clean_response_text(response.get('content', ''))
+            response_text = enforce_emoji_policy(user_id, response_text)
 
         # Add assistant response to history
         conversation_manager.add_message(user_id, "assistant", response_text)

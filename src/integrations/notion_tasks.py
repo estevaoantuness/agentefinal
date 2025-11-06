@@ -24,10 +24,24 @@ class NotionTaskReader:
     def __init__(self):
         """Initialize Notion client and database ID."""
         self.client = Client(auth=settings.NOTION_API_KEY)
-        self.db_id = os.getenv('NOTION_GROQ_TASKS_DB_ID')
+        self.db_id = (
+            os.getenv('NOTION_GROQ_TASKS_DB_ID')
+            or settings.NOTION_GROQ_TASKS_DB_ID
+            or settings.NOTION_DATABASE_ID
+        )
 
         if not self.db_id:
-            logger.warning("NOTION_GROQ_TASKS_DB_ID not configured - Groq task management disabled")
+            logger.warning(
+                "No Notion database configured for Groq task reader "
+                "(NOTION_GROQ_TASKS_DB_ID or NOTION_DATABASE_ID missing)"
+            )
+        elif not (
+            os.getenv('NOTION_GROQ_TASKS_DB_ID') or settings.NOTION_GROQ_TASKS_DB_ID
+        ):
+            logger.info(
+                "Using NOTION_DATABASE_ID as fallback for Groq task reader "
+                "since NOTION_GROQ_TASKS_DB_ID is not set"
+            )
 
     def get_all_tasks(self) -> List[Dict[str, Any]]:
         """
@@ -293,53 +307,61 @@ class NotionTaskReader:
                 'updated': page.get('last_edited_time')
             }
 
-            # Extract title
-            title_prop = properties.get('Task Name', {})
+            def _get_property(names: List[str]) -> Dict[str, Any]:
+                for name in names:
+                    if name in properties:
+                        return properties.get(name, {})
+                return {}
+
+            # Extract title (supports English and Portuguese property names)
+            title_prop = _get_property(['Task Name', 'Nome', 'Name', 'Title'])
             if title_prop.get('type') == 'title':
                 title_text = title_prop.get('title', [])
                 task['title'] = title_text[0]['text']['content'] if title_text else 'Untitled'
 
             # Extract status
-            status_prop = properties.get('Status', {})
-            if status_prop.get('type') == 'status':
-                task['status'] = status_prop.get('status', {}).get('name', 'Not Started')
+            status_prop = _get_property(['Status'])
+            if status_prop.get('type') in {'status', 'select'}:
+                status_value = status_prop.get(status_prop.get('type'), {})
+                if isinstance(status_value, dict):
+                    task['status'] = status_value.get('name', 'Not Started')
 
             # Extract priority
-            priority_prop = properties.get('Priority', {})
+            priority_prop = _get_property(['Priority', 'Prioridade'])
             if priority_prop.get('type') == 'select':
                 task['priority'] = priority_prop.get('select', {}).get('name', 'Medium')
 
             # Extract progress
-            progress_prop = properties.get('Progress', {})
+            progress_prop = _get_property(['Progress', 'Progresso'])
             if progress_prop.get('type') == 'number':
-                progress_value = progress_prop.get('number', 0)
-                task['progress'] = progress_value if progress_value else 0
+                progress_value = progress_prop.get('number', 0) or 0
+                task['progress'] = progress_value
 
             # Extract effort hours
-            effort_prop = properties.get('Effort Hours', {})
+            effort_prop = _get_property(['Effort Hours', 'Esforço', 'Horas Estimadas'])
             if effort_prop.get('type') == 'number':
                 task['effort_hours'] = effort_prop.get('number')
 
             # Extract due date
-            due_prop = properties.get('Due Date', {})
+            due_prop = _get_property(['Due Date', 'Prazo', 'Data'])
             if due_prop.get('type') == 'date':
                 date_obj = due_prop.get('date', {})
                 if date_obj:
                     task['due_date'] = date_obj.get('start')
 
             # Extract description
-            desc_prop = properties.get('Description', {})
+            desc_prop = _get_property(['Description', 'Descrição'])
             if desc_prop.get('type') == 'rich_text':
                 desc_text = desc_prop.get('rich_text', [])
                 task['description'] = desc_text[0]['text']['content'] if desc_text else None
 
             # Extract category
-            category_prop = properties.get('Category', {})
+            category_prop = _get_property(['Category', 'Categoria'])
             if category_prop.get('type') == 'select':
                 task['category'] = category_prop.get('select', {}).get('name')
 
             # Extract tags
-            tags_prop = properties.get('Tags', {})
+            tags_prop = _get_property(['Tags', 'Etiquetas'])
             if tags_prop.get('type') == 'multi_select':
                 tags = tags_prop.get('multi_select', [])
                 task['tags'] = [tag['name'] for tag in tags]

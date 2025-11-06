@@ -171,6 +171,101 @@ FUNCTION_DEFINITIONS = [
                 "required": ["task_id", "new_status"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sync_notion",
+            "description": "Synchronize all tasks with Notion database bidirectionally - sync local tasks to Notion and pull updates from Notion",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "enum": ["both", "to_notion", "from_notion"],
+                        "description": "Direction of sync: 'both' for bidirectional, 'to_notion' to push local to Notion, 'from_notion' to pull from Notion (default: both)"
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_reminder",
+            "description": "Set a reminder/notification for a task at a specific date and time. Reminder will be sent via WhatsApp at the scheduled time.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_number": {
+                        "type": "integer",
+                        "description": "The task number to set reminder for"
+                    },
+                    "reminder_datetime": {
+                        "type": "string",
+                        "description": "When to send reminder in ISO format (e.g., '2024-11-06T14:30:00') or natural language (e.g., 'tomorrow at 9am', 'in 2 hours')"
+                    }
+                },
+                "required": ["task_number", "reminder_datetime"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_reminders",
+            "description": "List all active reminders for the user",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_category",
+            "description": "Create a new task category to organize tasks",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Category name (e.g., 'Work', 'Personal', 'Shopping')"
+                    },
+                    "emoji": {
+                        "type": "string",
+                        "description": "Emoji to represent the category (optional, e.g., '💼' for Work)"
+                    },
+                    "color": {
+                        "type": "string",
+                        "description": "Color code (optional, e.g., 'red', 'blue', 'green')"
+                    }
+                },
+                "required": ["name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_category",
+            "description": "Assign a category to a task for better organization",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_number": {
+                        "type": "integer",
+                        "description": "The task number to assign category to"
+                    },
+                    "category_name": {
+                        "type": "string",
+                        "description": "The category name to assign"
+                    }
+                },
+                "required": ["task_number", "category_name"]
+            }
+        }
     }
 ]
 

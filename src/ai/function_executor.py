@@ -53,6 +53,21 @@ class FunctionExecutor:
             elif function_name == "update_notion_task_status":
                 return self._update_notion_task_status(user_id, arguments)
 
+            elif function_name == "sync_notion":
+                return self._sync_notion(user_id, arguments)
+
+            elif function_name == "set_reminder":
+                return self._set_reminder(user_id, arguments)
+
+            elif function_name == "list_reminders":
+                return self._list_reminders(user_id)
+
+            elif function_name == "create_category":
+                return self._create_category(user_id, arguments)
+
+            elif function_name == "assign_category":
+                return self._assign_category(user_id, arguments)
+
             else:
                 return json.dumps({
                     "success": False,
@@ -479,6 +494,239 @@ Sempre disponível para ajudar! 🚀
             return json.dumps({
                 "success": False,
                 "error": f"Error updating task status: {str(e)}"
+            })
+
+
+    def _sync_notion(self, user_id: str, arguments: Dict) -> str:
+        """Synchronize tasks with Notion database."""
+        try:
+            from src.integrations.notion_sync import sync_all_tasks
+
+            direction = arguments.get('direction', 'both')
+
+            # Execute sync
+            if direction in ['both', 'to_notion']:
+                sync_all_tasks()
+
+            logger.info(f"Notion sync completed for direction: {direction}")
+            return json.dumps({
+                "success": True,
+                "data": f"✅ Notion sync completed ({direction} direction)!"
+            })
+        except Exception as e:
+            logger.error(f"Error in sync_notion: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error syncing with Notion: {str(e)}"
+            })
+
+    def _set_reminder(self, user_id: str, arguments: Dict) -> str:
+        """Set a reminder for a task."""
+        try:
+            task_number = arguments.get('task_number')
+            reminder_datetime = arguments.get('reminder_datetime')
+
+            if not task_number or not reminder_datetime:
+                return json.dumps({
+                    "success": False,
+                    "error": "task_number and reminder_datetime are required"
+                })
+
+            # For MVP: store reminder in database
+            from src.database.session import SessionLocal
+            from src.database.models import Task, Reminder
+            from datetime import datetime
+
+            db = SessionLocal()
+            try:
+                tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
+
+                if task_number > len(tasks):
+                    return json.dumps({
+                        "success": False,
+                        "error": f"Task {task_number} not found"
+                    })
+
+                task = tasks[task_number - 1]
+
+                # Create reminder
+                reminder = Reminder(
+                    task_id=task.id,
+                    reminder_time=reminder_datetime,
+                    is_sent=False
+                )
+                db.add(reminder)
+                db.commit()
+
+                return json.dumps({
+                    "success": True,
+                    "data": f"✅ Reminder set for '{task.title}' at {reminder_datetime}!"
+                })
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error in set_reminder: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error setting reminder: {str(e)}"
+            })
+
+    def _list_reminders(self, user_id: str) -> str:
+        """List all reminders for the user."""
+        try:
+            from src.database.session import SessionLocal
+            from src.database.models import Task, Reminder
+
+            db = SessionLocal()
+            try:
+                # Get all tasks for user
+                tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
+                task_ids = [t.id for t in tasks]
+
+                # Get active reminders
+                if not task_ids:
+                    return json.dumps({
+                        "success": True,
+                        "data": "No reminders set."
+                    })
+
+                reminders = db.query(Reminder).filter(
+                    Reminder.task_id.in_(task_ids),
+                    Reminder.is_sent == False
+                ).all()
+
+                if not reminders:
+                    return json.dumps({
+                        "success": True,
+                        "data": "No active reminders."
+                    })
+
+                reminder_list = []
+                for reminder in reminders:
+                    task = db.query(Task).filter(Task.id == reminder.task_id).first()
+                    reminder_list.append(f"• {task.title} @ {reminder.reminder_time}")
+
+                return json.dumps({
+                    "success": True,
+                    "data": "\n".join(reminder_list) if reminder_list else "No reminders."
+                })
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error in list_reminders: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error listing reminders: {str(e)}"
+            })
+
+    def _create_category(self, user_id: str, arguments: Dict) -> str:
+        """Create a new task category."""
+        try:
+            name = arguments.get('name')
+            emoji = arguments.get('emoji', '')
+            color = arguments.get('color', '')
+
+            if not name:
+                return json.dumps({
+                    "success": False,
+                    "error": "Category name is required"
+                })
+
+            from src.database.session import SessionLocal
+            from src.database.models import Category
+
+            db = SessionLocal()
+            try:
+                # Check if category already exists
+                existing = db.query(Category).filter(
+                    Category.user_id == int(user_id),
+                    Category.name == name
+                ).first()
+
+                if existing:
+                    return json.dumps({
+                        "success": False,
+                        "error": f"Category '{name}' already exists"
+                    })
+
+                # Create category
+                category = Category(
+                    user_id=int(user_id),
+                    name=name,
+                    emoji=emoji,
+                    color=color
+                )
+                db.add(category)
+                db.commit()
+
+                return json.dumps({
+                    "success": True,
+                    "data": f"✅ Category '{name}' {emoji} created!"
+                })
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error in create_category: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error creating category: {str(e)}"
+            })
+
+    def _assign_category(self, user_id: str, arguments: Dict) -> str:
+        """Assign a category to a task."""
+        try:
+            task_number = arguments.get('task_number')
+            category_name = arguments.get('category_name')
+
+            if not task_number or not category_name:
+                return json.dumps({
+                    "success": False,
+                    "error": "task_number and category_name are required"
+                })
+
+            from src.database.session import SessionLocal
+            from src.database.models import Task, Category
+
+            db = SessionLocal()
+            try:
+                # Get task
+                tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
+
+                if task_number > len(tasks):
+                    return json.dumps({
+                        "success": False,
+                        "error": f"Task {task_number} not found"
+                    })
+
+                task = tasks[task_number - 1]
+
+                # Get category
+                category = db.query(Category).filter(
+                    Category.user_id == int(user_id),
+                    Category.name == category_name
+                ).first()
+
+                if not category:
+                    return json.dumps({
+                        "success": False,
+                        "error": f"Category '{category_name}' not found"
+                    })
+
+                # Assign category
+                task.category_id = category.id
+                db.commit()
+
+                return json.dumps({
+                    "success": True,
+                    "data": f"✅ Task '{task.title}' assigned to '{category_name}' {category.emoji}!"
+                })
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error in assign_category: {e}")
+            return json.dumps({
+                "success": False,
+                "error": f"Error assigning category: {str(e)}"
             })
 
 

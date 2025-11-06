@@ -107,7 +107,13 @@ def get_system_prompt(user_name: str = None) -> str:
     if not user_name or not isinstance(user_name, str) or user_name.strip() == "":
         return SYSTEM_PROMPT_BASE
 
-    # Create personalized prompt
+    # Create personalized prompt by splitting and reconstructing safely
+    parts = SYSTEM_PROMPT_BASE.split('## 🧠 CONTEXTO DO SISTEMA')
+    if len(parts) > 1:
+        rest_of_prompt = '## 🧠 CONTEXTO DO SISTEMA' + parts[1]
+    else:
+        rest_of_prompt = SYSTEM_PROMPT_BASE
+
     personalized_prompt = f"""Você é Pangeia, um assistente pessoal de produtividade integrado ao WhatsApp.
 
 ## 🎯 SUA MISSÃO
@@ -116,6 +122,6 @@ Ajudar {user_name} a gerenciar suas tarefas de forma natural, eficiente e amigá
 ## 👤 QUEM VOCÊ ESTÁ CONVERSANDO
 Você está conversando com {user_name}. Use o nome dele/dela naturalmente ao saudar e em momentos apropriados para criar uma conversa mais pessoal e engajante.
 
-{SYSTEM_PROMPT_BASE.split('## 🧠 CONTEXTO DO SISTEMA')[1]}"""
+{rest_of_prompt}"""
 
     return personalized_prompt

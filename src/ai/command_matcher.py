@@ -19,7 +19,7 @@ class CommandMatcher:
         # Regex patterns for each command - multiple synonyms per command
         self.patterns = {
             'view_tasks': [
-                r'\b(minhas?\s+tarefa|ver\s+tarefa|lista|listar|mostrar\s+tarefa|quais?\s+tarefa)',
+                r'\b(minha[s]?\s+tarefa[s]?|ver\s+tarefa|lista|listar|mostrar\s+tarefa[s]?|quai[s]?\s+tarefa[s]?)',
                 r'\b(o\s+que\s+tenho|que\s+tenho\s+(pra\s+)?fazer|tarefas?)',
                 r'\b(tarefas?\s+(pendente|em\s+andamento|concluída))',
                 r'\b(task|todo)',

@@ -213,7 +213,7 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                     user_id=user_id,
                     user_name=user_name
                 )
-                response_text = clean_response_text(response.content)
+                response_text = clean_response_text(response.get('content', ''))
                 conversation_manager.add_message(user_id, "assistant", response_text)
                 return response_text
             else:
@@ -242,16 +242,16 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
         function_args = None
 
         # Check if OpenAI wants to call a function (tool_calls)
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            # Standard tool_calls format
-            tool_call = response.tool_calls[0]
-            function_name = tool_call.function.name
-            function_args = json.loads(tool_call.function.arguments)
-            logger.info(f"OpenAI called function via tool_calls: {function_name}")
+        if response.get('function_call'):
+            # Standard function_call format
+            tool_call = response['function_call']
+            function_name = tool_call.get('name')
+            function_args = json.loads(tool_call.get('arguments', '{}'))
+            logger.info(f"OpenAI called function via function_call: {function_name}")
 
-        elif response.content:
+        elif response.get('content'):
             # Fallback: Check for text-based function calls
-            text_call = parse_text_function_call(response.content)
+            text_call = parse_text_function_call(response['content'])
             if text_call:
                 function_name = text_call['name']
                 try:
@@ -281,10 +281,10 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                 user_id=user_id,
                 user_name=user_name
             )
-            response_text = clean_response_text(final_response.content)
+            response_text = clean_response_text(final_response.get('content', ''))
         else:
             # Direct response - but clean function call leakage
-            response_text = clean_response_text(response.content)
+            response_text = clean_response_text(response.get('content', ''))
 
         # Add assistant response to history
         conversation_manager.add_message(user_id, "assistant", response_text)

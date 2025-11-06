@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     NOTION_DATABASE_ID: str
     NOTION_GROQ_TASKS_DB_ID: Optional[str] = None
     NOTION_USERS_DATABASE_ID: Optional[str] = None
+    NOTION_SOURCE_DATABASE_ID: Optional[str] = None
+    NOTION_WEBHOOK_TOKEN: Optional[str] = None
 
     # OpenAI (PRIMARY - Main LLM for text)
     OPENAI_API_KEY: str

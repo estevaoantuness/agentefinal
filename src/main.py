@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from src.config.settings import settings
 from src.api.webhooks import router as webhook_router
 from src.api.collaborators import router as collaborators_router
+from src.api.notion_webhook import router as notion_router
 from src.database.session import init_db
 from src.utils.logger import logger
 
@@ -60,6 +61,7 @@ app.add_middleware(
 # Include routers
 app.include_router(webhook_router, tags=["webhooks"])
 app.include_router(collaborators_router, tags=["collaborators"])
+app.include_router(notion_router, tags=["notion"])
 
 
 @app.get("/")

@@ -233,7 +233,7 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
         response = openai_client.chat_completion(
             messages=messages,
             user_id=user_id,
-            user_name=user.name,
+            user_name=user_name,
             function_call="auto"
         )
 

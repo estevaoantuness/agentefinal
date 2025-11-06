@@ -133,7 +133,7 @@ NOTION_USERS_DATABASE_ID=2f0e465754d444c88ee493ca30b1ea36  # ⚠️ Fallback
 Run this script locally to find your database IDs:
 
 ```bash
-export NOTION_API_KEY="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"
+export NOTION_API_KEY="YOUR_NOTION_API_KEY_HERE"
 python3 scripts/list_all_notion_databases.py
 ```
 

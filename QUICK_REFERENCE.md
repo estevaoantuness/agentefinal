@@ -77,7 +77,7 @@ Databases to share:
 
 Run locally:
 ```bash
-export NOTION_API_KEY="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"
+export NOTION_API_KEY="YOUR_NOTION_API_KEY_HERE"
 python3 scripts/list_all_notion_databases.py
 ```
 

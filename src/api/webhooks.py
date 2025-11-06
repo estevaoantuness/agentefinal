@@ -3,7 +3,7 @@ import json
 import re
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from src.database.session import get_db
 from src.database.models import User

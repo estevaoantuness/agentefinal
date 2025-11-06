@@ -521,55 +521,16 @@ Sempre disponível para ajudar! 🚀
             })
 
     def _set_reminder(self, user_id: str, arguments: Dict) -> str:
-        """Set a reminder for a task."""
-        try:
-            task_number = arguments.get('task_number')
-            reminder_datetime = arguments.get('reminder_datetime')
+        """Set a reminder for a task.
 
-            if not task_number or not reminder_datetime:
-                return json.dumps({
-                    "success": False,
-                    "error": "task_number and reminder_datetime are required"
-                })
-
-            # For MVP: store reminder in database
-            from src.database.session import SessionLocal
-            from src.database.models import Task, Reminder
-            from datetime import datetime
-
-            db = SessionLocal()
-            try:
-                tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
-
-                if task_number > len(tasks):
-                    return json.dumps({
-                        "success": False,
-                        "error": f"Task {task_number} not found"
-                    })
-
-                task = tasks[task_number - 1]
-
-                # Create reminder
-                reminder = Reminder(
-                    task_id=task.id,
-                    reminder_time=reminder_datetime,
-                    is_sent=False
-                )
-                db.add(reminder)
-                db.commit()
-
-                return json.dumps({
-                    "success": True,
-                    "data": f"✅ Reminder set for '{task.title}' at {reminder_datetime}!"
-                })
-            finally:
-                db.close()
-        except Exception as e:
-            logger.error(f"Error in set_reminder: {e}")
-            return json.dumps({
-                "success": False,
-                "error": f"Error setting reminder: {str(e)}"
-            })
+        NOTE: This feature is disabled pending user authorization.
+        Personal notifications/reminders will only work after explicit authorization.
+        """
+        logger.info("set_reminder called but feature is disabled pending authorization")
+        return json.dumps({
+            "success": False,
+            "error": "⏳ Reminder feature is disabled pending authorization. This feature will be enabled once you provide explicit permission for personal notifications."
+        })
 
     def _list_reminders(self, user_id: str) -> str:
         """List all reminders for the user."""

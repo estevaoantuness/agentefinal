@@ -1,5 +1,5 @@
 """Conversation history management per user."""
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 
 from src.utils.logger import logger
@@ -36,6 +36,11 @@ class ConversationManager:
         if user_id in self.conversations:
             conv = self.conversations[user_id]
             last_activity = conv['last_activity']
+
+            if user_name and conv['messages']:
+                first_message = conv['messages'][0]
+                if first_message.get('role') == "system":
+                    first_message['content'] = get_system_prompt(user_name=user_name)
 
             if datetime.now() - last_activity < timedelta(minutes=self.timeout_minutes):
                 logger.debug(f"Existing conversation found for {user_id}")
@@ -81,7 +86,13 @@ class ConversationManager:
 
         logger.debug(f"Message added: {role} - {content[:50]}...")
 
-    def add_function_result(self, user_id: str, function_name: str, result: str):
+    def add_function_result(
+        self,
+        user_id: str,
+        function_name: str,
+        result: str,
+        tool_call_id: Optional[str] = None
+    ):
         """
         Add function result to conversation history.
 
@@ -89,18 +100,44 @@ class ConversationManager:
             user_id: User ID
             function_name: Executed function name
             result: Function result
+            tool_call_id: Tool call id to link with assistant message (optional)
         """
         messages = self.get_or_create_conversation(user_id)
 
-        messages.append({
-            "role": "function",
+        entry = {
+            "role": "tool" if tool_call_id else "function",
             "name": function_name,
             "content": result
-        })
+        }
+
+        if tool_call_id:
+            entry["tool_call_id"] = tool_call_id
+
+        messages.append(entry)
 
         self.conversations[user_id]['last_activity'] = datetime.now()
 
         logger.debug(f"Function result added: {function_name}")
+
+    def add_tool_call_message(self, user_id: str, tool_call: Dict[str, Any]):
+        """
+        Record assistant tool call message so OpenAI can correlate tool responses.
+
+        Args:
+            user_id: User ID
+            tool_call: Tool call payload as expected by OpenAI API
+        """
+        messages = self.get_or_create_conversation(user_id)
+
+        messages.append({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [tool_call]
+        })
+
+        self.conversations[user_id]['last_activity'] = datetime.now()
+
+        logger.debug(f"Assistant tool call recorded: {tool_call.get('function', {}).get('name')}")
 
     def clear_conversation(self, user_id: str):
         """

@@ -240,13 +240,35 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
         # Variable to track if function was executed
         function_name = None
         function_args = None
+        tool_call_id = None
+        tool_call_payload = None
 
         # Check if OpenAI wants to call a function (tool_calls)
         if response.get('function_call'):
             # Standard function_call format
             tool_call = response['function_call']
             function_name = tool_call.get('name')
-            function_args = json.loads(tool_call.get('arguments', '{}'))
+            function_args = tool_call.get('arguments') or {}
+            tool_call_id = tool_call.get('id')
+
+            if isinstance(function_args, str):
+                try:
+                    function_args = json.loads(function_args)
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse function args string: {function_args}")
+                    function_args = {}
+
+            if tool_call_id:
+                arguments_json = tool_call.get('arguments_json') or json.dumps(function_args)
+                tool_call_payload = {
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": function_name,
+                        "arguments": arguments_json
+                    }
+                }
+
             logger.info(f"OpenAI called function via function_call: {function_name}")
 
         elif response.get('content'):
@@ -262,6 +284,9 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
 
         # Execute function if found
         if function_name and function_args:
+            if tool_call_payload:
+                conversation_manager.add_tool_call_message(user_id, tool_call_payload)
+
             function_result = function_executor.execute(
                 function_name,
                 function_args,
@@ -271,7 +296,8 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
             conversation_manager.add_function_result(
                 user_id,
                 function_name,
-                function_result
+                function_result,
+                tool_call_id=tool_call_id
             )
 
             # Get natural response

@@ -60,14 +60,22 @@ class OpenAIClient:
         """
         for attempt in range(max_retries):
             try:
-                # Prepare system message
-                system_message = {
-                    "role": "system",
-                    "content": get_system_prompt(user_name)
-                }
+                # Build full message list without duplicating system prompt
+                full_messages = [m.copy() for m in messages] if messages else []
 
-                # Build full message list
-                full_messages = [system_message] + messages
+                if not full_messages:
+                    full_messages = [{
+                        "role": "system",
+                        "content": get_system_prompt(user_name)
+                    }]
+                elif full_messages[0].get("role") == "system":
+                    # Refresh system prompt to keep personalization up to date
+                    full_messages[0]["content"] = get_system_prompt(user_name)
+                else:
+                    full_messages.insert(0, {
+                        "role": "system",
+                        "content": get_system_prompt(user_name)
+                    })
 
                 # Build API call parameters
                 kwargs = {
@@ -88,12 +96,15 @@ class OpenAIClient:
                 if functions is None:
                     functions = get_function_definitions()
 
+                tools = []
                 if functions:
-                    # Prepare tools in OpenAI format
-                    tools = []
                     for f in functions:
-                        # Ensure proper structure
-                        if isinstance(f, dict) and 'name' in f:
+                        if not isinstance(f, dict):
+                            continue
+
+                        if f.get('type') == 'function' and 'function' in f:
+                            tools.append(f)
+                        elif 'name' in f:
                             tools.append({
                                 'type': 'function',
                                 'function': {
@@ -103,10 +114,10 @@ class OpenAIClient:
                                 }
                             })
 
-                    if tools:
-                        kwargs['tools'] = tools
-                        if function_call:
-                            kwargs['tool_choice'] = "auto"
+                if tools:
+                    kwargs['tools'] = tools
+                    if function_call is not None:
+                        kwargs['tool_choice'] = function_call
 
                 logger.debug(f"OpenAI request: {len(messages)} messages, "
                             f"model={self.model}, user={user_name or user_id}")
@@ -131,9 +142,25 @@ class OpenAIClient:
                 # Handle tool calls (function calling)
                 if hasattr(message, 'tool_calls') and message.tool_calls:
                     tool_call = message.tool_calls[0]
+
+                    arguments = tool_call.function.arguments
+                    raw_arguments = arguments
+                    if isinstance(arguments, str):
+                        try:
+                            parsed_arguments = json.loads(arguments)
+                        except json.JSONDecodeError:
+                            logger.warning(
+                                "Failed to parse tool arguments as JSON; returning raw string"
+                            )
+                            parsed_arguments = arguments
+                    else:
+                        parsed_arguments = arguments
+
                     result['function_call'] = {
+                        'id': getattr(tool_call, 'id', None),
                         'name': tool_call.function.name,
-                        'arguments': json.loads(tool_call.function.arguments)
+                        'arguments': parsed_arguments,
+                        'arguments_json': raw_arguments if isinstance(raw_arguments, str) else json.dumps(raw_arguments)
                     }
                     logger.info(f"OpenAI function call: {tool_call.function.name}")
 

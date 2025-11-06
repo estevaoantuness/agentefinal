@@ -6,6 +6,9 @@ templates de resposta e configurações do modelo OpenAI.
 
 from datetime import datetime
 import pytz
+from src.ai.function_definitions import (
+    FUNCTION_DEFINITIONS as OPENAI_FUNCTION_DEFINITIONS
+)
 
 # ============= SYSTEM PROMPT COMPLETO =============
 
@@ -29,27 +32,34 @@ Você está integrado com:
 1. **view_tasks**: Visualizar tarefas do usuário
    - Quando usar: usuário pede para ver, listar, mostrar tarefas
    - Exemplos: "minhas tarefas", "o que tenho pra fazer", "lista"
-   - Parâmetros: filter (opcional: "all", "pending", "in_progress", "completed")
+   - Parâmetros: `filter_status` (opcional: "all", "pending", "in_progress", "completed")
 
 2. **create_task**: Criar nova tarefa
    - Quando usar: usuário quer adicionar, criar, anotar algo
    - Exemplos: "criar tarefa: fazer relatório", "preciso comprar leite"
-   - Parâmetros: description (string obrigatória)
+   - Parâmetros: `title` (obrigatório), `description` (opcional), `priority` (opcional: "low", "medium", "high", "urgent")
 
 3. **mark_done**: Marcar tarefa(s) como concluída
    - Quando usar: usuário diz que terminou, finalizou, completou
    - Exemplos: "feito 1", "terminei a 3", "pronto 1 2 e 5"
-   - Parâmetros: task_ids (array de inteiros obrigatório)
+   - Parâmetros: `task_numbers` (array de inteiros)
 
-4. **mark_in_progress**: Marcar tarefa em andamento
+4. **mark_progress**: Marcar tarefas em andamento
    - Quando usar: usuário começou, está fazendo, vai trabalhar nisso
    - Exemplos: "comecei a 2", "fazendo 1", "to mexendo na 3"
-   - Parâmetros: task_id (inteiro obrigatório)
+   - Parâmetros: `task_numbers` (array de inteiros)
 
 5. **view_progress**: Ver relatório de progresso
    - Quando usar: usuário quer saber desempenho, progresso, status
    - Exemplos: "progresso", "como estou", "quantas tarefas fiz"
    - Parâmetros: nenhum
+
+6. **Outras funções disponíveis** (use quando necessário):
+   - `get_help`: explicar comandos disponíveis
+   - `mark_onboarded` / `check_onboarding_status`: gerenciar onboarding no Notion
+   - `get_notion_tasks`, `update_notion_task_status`, `sync_notion`: sincronização com Notion
+   - `set_reminder`, `list_reminders`: lembretes por WhatsApp
+   - `create_category`, `assign_category`: categorias personalizadas de tarefas
 
 **Regras de Interpretação:**
 
@@ -73,7 +83,7 @@ Você está integrado com:
 
 4. **Prioridade de Intenções:**
    Se mensagem ambígua, priorize nesta ordem:
-   1. Ações com números (mark_done, mark_in_progress)
+   1. Ações com números (mark_done, mark_progress)
    2. Visualização (view_tasks, view_progress)
    3. Criação (create_task)
    4. Ajuda/conversação
@@ -349,73 +359,7 @@ RESPONSE_TEMPLATES = {
 
 # ============= FUNCTION DEFINITIONS =============
 
-FUNCTION_DEFINITIONS = [
-    {
-        "name": "view_tasks",
-        "description": "Visualiza as tarefas do usuário. Use quando ele pedir para ver, listar, mostrar ou perguntar sobre suas tarefas.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "filter": {
-                    "type": "string",
-                    "enum": ["all", "pending", "in_progress", "completed"],
-                    "description": "Filtro opcional: 'all' (padrão), 'pending' (a fazer), 'in_progress' (em andamento), 'completed' (concluídas)"
-                }
-            }
-        }
-    },
-    {
-        "name": "create_task",
-        "description": "Cria uma nova tarefa. Use quando usuário quiser adicionar, criar, anotar ou registrar algo para fazer.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string",
-                    "description": "Descrição clara e concisa da tarefa (sem prefixos como 'criar tarefa:')"
-                }
-            },
-            "required": ["description"]
-        }
-    },
-    {
-        "name": "mark_done",
-        "description": "Marca uma ou mais tarefas como concluídas. Use quando usuário disser que terminou, finalizou, completou ou está 'feito'.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "task_ids": {
-                    "type": "array",
-                    "items": {"type": "integer"},
-                    "description": "Lista de IDs das tarefas a marcar como concluídas. Aceita múltiplos valores."
-                }
-            },
-            "required": ["task_ids"]
-        }
-    },
-    {
-        "name": "mark_in_progress",
-        "description": "Marca uma tarefa como em andamento. Use quando usuário disser que começou, está fazendo ou vai trabalhar nisso.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "task_id": {
-                    "type": "integer",
-                    "description": "ID da tarefa a marcar como em andamento"
-                }
-            },
-            "required": ["task_id"]
-        }
-    },
-    {
-        "name": "view_progress",
-        "description": "Mostra relatório de progresso do usuário. Use quando ele perguntar sobre progresso, desempenho, status ou quantas tarefas fez.",
-        "parameters": {
-            "type": "object",
-            "properties": {}
-        }
-    }
-]
+FUNCTION_DEFINITIONS = OPENAI_FUNCTION_DEFINITIONS
 
 # ============= CONFIGURAÇÕES DO MODELO =============
 

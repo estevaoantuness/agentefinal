@@ -21,11 +21,14 @@ class Settings(BaseSettings):
     NOTION_GROQ_TASKS_DB_ID: Optional[str] = None
     NOTION_USERS_DATABASE_ID: Optional[str] = None
 
-    # OpenAI / LangChain
+    # OpenAI (PRIMARY - Main LLM for text)
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_MAX_TOKENS: int = 500
     OPENAI_TEMPERATURE: float = 0.7
+
+    # Groq (ONLY for audio processing - NOT for text)
+    GROQ_API_KEY: Optional[str] = None
 
     # Application
     APP_HOST: str = "0.0.0.0"

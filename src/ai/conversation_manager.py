@@ -9,7 +9,7 @@ from src.ai.system_prompt import get_system_prompt
 class ConversationManager:
     """Manages conversation history with OpenAI."""
 
-    def __init__(self, max_messages: int = 20, timeout_minutes: int = 30):
+    def __init__(self, max_messages: int = 5, timeout_minutes: int = 30):
         """
         Initialize conversation manager.
 
@@ -166,5 +166,5 @@ class ConversationManager:
             logger.info(f"Removed {len(expired)} expired conversations")
 
 
-# Global instance
-conversation_manager = ConversationManager()
+# Global instance with extended history for production usage
+conversation_manager = ConversationManager(max_messages=20)

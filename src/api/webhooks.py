@@ -46,11 +46,23 @@ def clean_response_text(text: str) -> str:
     if not text:
         return ""
 
-    # Remove XML-style function tags: <function=...></function>
-    cleaned = re.sub(r'<function=.*?></function>', '', text, flags=re.DOTALL)
+    cleaned = text
 
-    # Remove arrow-style function calls: =function_name>{...}
-    cleaned = re.sub(r'=\w+>\{[^}]*\}', '', cleaned)
+    # Remove XML-style function tags: <function=...></function> with whitespace handling
+    cleaned = re.sub(
+        r'<function=[^>]+>.*?</function>',
+        '',
+        cleaned,
+        flags=re.DOTALL
+    )
+
+    # Remove arrow-style function calls: =function_name>{...} supporting multiline
+    cleaned = re.sub(
+        r'(?<!function)=(\w+)>\s*\{.*?\}',
+        '',
+        cleaned,
+        flags=re.DOTALL
+    )
 
     # Remove simple angle bracket function markers: <function_name>
     cleaned = re.sub(r'<\w+>', '', cleaned)
@@ -77,7 +89,11 @@ def parse_text_function_call(text: str) -> Optional[Dict]:
         return None
 
     # Try arrow format: =function_name>{...}
-    arrow_match = re.search(r'=(\w+)>(\{[^}]*\})', text)
+    arrow_match = re.search(
+        r'(?<!function)=(\w+)>\s*(\{.*?\})',
+        text,
+        re.DOTALL
+    )
     if arrow_match:
         try:
             return {

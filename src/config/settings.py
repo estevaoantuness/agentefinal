@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # Notion API
     NOTION_API_KEY: str
     NOTION_DATABASE_ID: str
+    NOTION_GROQ_TASKS_DB_ID: Optional[str] = None
+    NOTION_USERS_DATABASE_ID: Optional[str] = None
 
     # OpenAI / LangChain
     OPENAI_API_KEY: str

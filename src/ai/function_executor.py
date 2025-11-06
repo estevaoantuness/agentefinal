@@ -402,6 +402,22 @@ Sempre disponível para ajudar! 🚀
 
             task_reader = get_notion_task_reader()
 
+            # Try to resolve user name for personalization filtering
+            user_name = None
+            try:
+                from src.database.session import SessionLocal
+                from src.database.models import User
+
+                db = SessionLocal()
+                try:
+                    user = db.query(User).filter(User.id == int(user_id)).first()
+                    if user and user.name:
+                        user_name = user.name.strip()
+                finally:
+                    db.close()
+            except Exception as exc:
+                logger.debug(f"Could not resolve user name for Notion filter: {exc}")
+
             # Get tasks based on filter
             if status_filter != 'all':
                 # Map filter names to Notion status format
@@ -498,6 +514,31 @@ Sempre disponível para ajudar! 🚀
             else:
                 # Default: formatted readable list
                 formatted_data = task_reader.format_for_groq(tasks)
+
+            # Filter tasks by assignee if possible (prefer tasks assigned to current user)
+            if user_name:
+                normalized_user = user_name.casefold()
+
+                def _matches_assignee(task: Dict[str, Any]) -> bool:
+                    assignees = task.get('assignees') or []
+                    for name in assignees:
+                        if name and normalized_user in name.casefold():
+                            return True
+                    return False
+
+                assigned_tasks = [task for task in tasks if _matches_assignee(task)]
+                if assigned_tasks:
+                    tasks = assigned_tasks
+                    if format_type == 'summary':
+                        formatted_data = json.dumps(_build_summary(tasks), ensure_ascii=False, indent=2)
+                    elif format_type == 'by_status':
+                        by_status = {}
+                        for task in tasks:
+                            status = task.get('status', 'Unknown')
+                            by_status.setdefault(status, []).append(task)
+                        formatted_data = json.dumps(by_status, ensure_ascii=False, indent=2)
+                    else:
+                        formatted_data = task_reader.format_for_groq(tasks)
 
             logger.info(f"Retrieved {len(tasks)} tasks from Notion")
             return json.dumps({

@@ -234,6 +234,9 @@ class NotionTaskReader:
             if task.get('description'):
                 formatted += f"   Descrição: {task['description']}\n"
 
+            if task.get('assignees'):
+                formatted += f"   Responsável: {', '.join(task['assignees'])}\n"
+
             formatted += "\n"
 
         return formatted
@@ -365,6 +368,37 @@ class NotionTaskReader:
             if tags_prop.get('type') == 'multi_select':
                 tags = tags_prop.get('multi_select', [])
                 task['tags'] = [tag['name'] for tag in tags]
+
+            # Extract assignees / responsáveis
+            assignee_prop = _get_property([
+                'Responsável',
+                'Responsavel',
+                'Owner',
+                'Assignee',
+                'Assigned To',
+                'Assigned'
+            ])
+            assignees: List[str] = []
+            if assignee_prop.get('type') == 'people':
+                people = assignee_prop.get('people', [])
+                for person in people:
+                    name = person.get('name')
+                    if name:
+                        assignees.append(name)
+            elif assignee_prop.get('type') in {'rich_text', 'title'}:
+                entries = assignee_prop.get(assignee_prop.get('type'), [])
+                if entries:
+                    for entry in entries:
+                        text = entry.get('plain_text') or entry.get('text', {}).get('content')
+                        if text:
+                            # Split by commas to allow multiple names in text fields
+                            for part in text.split(','):
+                                name = part.strip()
+                                if name:
+                                    assignees.append(name)
+
+            if assignees:
+                task['assignees'] = assignees
 
             return task
 

@@ -13,9 +13,10 @@ class OpenAIClient:
 
     def __init__(self):
         """Initialize Groq client."""
-        api_key = os.getenv('OPENAI_API_KEY')
+        # Tenta GROQ_API_KEY primeiro (recomendado), depois OPENAI_API_KEY (fallback)
+        api_key = os.getenv('GROQ_API_KEY') or os.getenv('OPENAI_API_KEY')
         if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment")
+            raise ValueError("GROQ_API_KEY ou OPENAI_API_KEY não encontrada no ambiente")
 
         self.client = Groq(api_key=api_key)
         self.model = os.getenv('OPENAI_MODEL', 'llama-3.1-8b-instant')

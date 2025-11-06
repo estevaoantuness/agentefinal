@@ -89,11 +89,24 @@ class OpenAIClient:
                     functions = get_function_definitions()
 
                 if functions:
-                    # Convert function definitions to OpenAI format
-                    tools = [{'type': 'function', 'function': f} for f in functions]
-                    kwargs['tools'] = tools
-                    if function_call:
-                        kwargs['tool_choice'] = "auto"
+                    # Prepare tools in OpenAI format
+                    tools = []
+                    for f in functions:
+                        # Ensure proper structure
+                        if isinstance(f, dict) and 'name' in f:
+                            tools.append({
+                                'type': 'function',
+                                'function': {
+                                    'name': f.get('name'),
+                                    'description': f.get('description', ''),
+                                    'parameters': f.get('parameters', {'type': 'object'})
+                                }
+                            })
+
+                    if tools:
+                        kwargs['tools'] = tools
+                        if function_call:
+                            kwargs['tool_choice'] = "auto"
 
                 logger.debug(f"OpenAI request: {len(messages)} messages, "
                             f"model={self.model}, user={user_name or user_id}")

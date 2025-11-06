@@ -14,7 +14,6 @@ from src.integrations.evolution_api import evolution_client
 # OpenAI integration
 from src.ai.openai_client import OpenAIClient
 from src.ai.conversation_manager import conversation_manager
-from src.ai.function_definitions import get_function_definitions
 from src.ai.function_executor import function_executor
 
 # Notion integration
@@ -209,7 +208,11 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
 
                 # Get natural language response from LLM
                 messages = conversation_manager.get_or_create_conversation(user_id, user_name=user_name)
-                response = openai_client.chat_completion(messages=messages)
+                response = openai_client.chat_completion(
+                    messages=messages,
+                    user_id=user_id,
+                    user_name=user_name
+                )
                 response_text = clean_response_text(response.content)
                 conversation_manager.add_message(user_id, "assistant", response_text)
                 return response_text
@@ -226,9 +229,11 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
         logger.info(f"Calling OpenAI for user {user_id} with {len(messages)} messages in history")
 
         # Call OpenAI with function calling
+        # Functions are loaded from system_prompt by default
         response = openai_client.chat_completion(
             messages=messages,
-            functions=get_function_definitions(),
+            user_id=user_id,
+            user_name=user.name,
             function_call="auto"
         )
 
@@ -271,7 +276,11 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
 
             # Get natural response
             messages = conversation_manager.get_or_create_conversation(user_id, user_name=user_name)
-            final_response = openai_client.chat_completion(messages=messages)
+            final_response = openai_client.chat_completion(
+                messages=messages,
+                user_id=user_id,
+                user_name=user_name
+            )
             response_text = clean_response_text(final_response.content)
         else:
             # Direct response - but clean function call leakage

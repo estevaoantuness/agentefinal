@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     NOTION_USERS_DATABASE_ID: Optional[str] = None
     NOTION_SOURCE_DATABASE_ID: Optional[str] = None
     NOTION_WEBHOOK_TOKEN: Optional[str] = None
+    SLACK_BOT_TOKEN: Optional[str] = None
+    SLACK_TASKS_CHANNEL: Optional[str] = None
 
     # OpenAI (PRIMARY - Main LLM for text)
     OPENAI_API_KEY: str

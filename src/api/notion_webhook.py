@@ -2,13 +2,29 @@
 from fastapi import APIRouter, Request, Header, HTTPException
 from notion_client import Client
 from notion_client.errors import APIResponseError
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 from src.config.settings import settings
 from src.utils.logger import logger
 
+try:
+    from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
+except ModuleNotFoundError:  # pragma: no cover
+    WebClient = None  # type: ignore
+    SlackApiError = Exception  # type: ignore
+
 
 router = APIRouter(prefix="/notion", tags=["notion"])
+
+slack_client: Optional["WebClient"] = None
+if WebClient and settings.SLACK_BOT_TOKEN:
+    try:
+        slack_client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        logger.info("Slack client initialized for Notion webhook notifications")
+    except Exception as exc:  # pragma: no cover
+        slack_client = None
+        logger.error(f"Failed to initialize Slack client: {exc}")
 
 
 def _ensure_configuration():
@@ -47,28 +63,45 @@ def _extract_select(props: Dict[str, Any], key: str) -> Optional[str]:
     return select.get("name")
 
 
-def _extract_people(props: Dict[str, Any], keys: List[str]) -> List[Dict[str, str]]:
+def _extract_people(
+    props: Dict[str, Any],
+    keys: List[str]
+) -> Tuple[List[Dict[str, str]], List[str]]:
+    assignee_payload: List[Dict[str, str]] = []
+    assignee_names: List[str] = []
+
     for key in keys:
         people_prop = props.get(key)
         if not people_prop:
             continue
 
-        people = people_prop.get("people")
-        if isinstance(people, list) and people:
-            return [{"id": person.get("id")} for person in people if person.get("id")]
+        if people_prop.get("type") == "people":
+            people = people_prop.get("people", [])
+            for person in people:
+                person_id = person.get("id")
+                if person_id:
+                    assignee_payload.append({"id": person_id})
+                display = person.get("name") or person.get("email")
+                if display:
+                    assignee_names.append(display)
+            if assignee_payload:
+                break
 
-        # Sometimes assignees are stored as rich text
-        if people_prop.get("type") in {"rich_text", "title"}:
+        elif people_prop.get("type") in {"rich_text", "title"}:
             entries = people_prop.get(people_prop["type"], [])
-            assignees = []
+            text_names: List[str] = []
             for entry in entries:
-                text = entry.get("plain_text") or entry.get("text", {}).get("content")
-                if text:
-                    assignees.append({"name": text})
-            if assignees:
-                return assignees
+                raw = entry.get("plain_text") or entry.get("text", {}).get("content", "")
+                if not raw:
+                    continue
+                text_names.extend([part.strip() for part in raw.split(",") if part.strip()])
 
-    return []
+            if text_names:
+                assignee_payload = [{"name": name} for name in text_names]
+                assignee_names.extend(text_names)
+                break
+
+    return assignee_payload, assignee_names
 
 
 def _map_status(status_name: Optional[str]) -> Optional[str]:
@@ -116,7 +149,10 @@ async def handle_notion_webhook(request: Request, authorization: str = Header(No
         or _extract_select(props, "Status 1")
         or _extract_select(props, "Workflow")
     )
-    assignees = _extract_people(props, ["Assignees", "Responsável", "Responsaveis", "Owner", "Assigned"])
+    assignees, assignee_names = _extract_people(
+        props,
+        ["Assignees", "Responsável", "Responsaveis", "Owner", "Assigned"]
+    )
     project = _extract_select(props, "Project") or _extract_select(props, "Projeto")
     page_url = page.get("url")
 
@@ -173,6 +209,14 @@ async def handle_notion_webhook(request: Request, authorization: str = Header(No
         except APIResponseError as exc:
             logger.error(f"Failed to update mirrored Notion page {target_page_id}: {exc}")
             raise HTTPException(status_code=400, detail=f"Failed to update mirrored page: {exc}") from exc
+        _send_slack_notification(
+            action="updated",
+            title=title,
+            page_url=page_url,
+            status=status_name,
+            assignees=assignee_names,
+            project=project
+        )
         return {"ok": True, "updated": target_page_id}
 
     logger.info(f"Creating mirrored Notion task for source {page_id}")
@@ -185,5 +229,45 @@ async def handle_notion_webhook(request: Request, authorization: str = Header(No
     except APIResponseError as exc:
         logger.error(f"Failed to create mirrored Notion page from {page_id}: {exc}")
         raise HTTPException(status_code=400, detail=f"Failed to create mirrored page: {exc}") from exc
+    _send_slack_notification(
+        action="created",
+        title=title,
+        page_url=page_url,
+        status=status_name,
+        assignees=assignee_names,
+        project=project
+    )
 
     return {"ok": True, "created": True}
+def _send_slack_notification(
+    action: str,
+    title: str,
+    page_url: Optional[str],
+    status: Optional[str],
+    assignees: List[str],
+    project: Optional[str]
+) -> None:
+    if not slack_client or not settings.SLACK_TASKS_CHANNEL:
+        return
+
+    lines = [f"*Task {action.capitalize()}:* {title}"]
+    if status:
+        lines.append(f"*Status:* {status}")
+    if assignees:
+        lines.append(f"*Responsáveis:* {', '.join(assignees)}")
+    if project:
+        lines.append(f"*Projeto:* {project}")
+    if page_url:
+        lines.append(page_url)
+
+    message = "\n".join(lines)
+
+    try:
+        slack_client.chat_postMessage(
+            channel=settings.SLACK_TASKS_CHANNEL,
+            text=message
+        )
+    except SlackApiError as exc:  # pragma: no cover
+        logger.error(f"Failed to send Slack notification: {exc.response.get('error')}")
+    except Exception as exc:  # pragma: no cover
+        logger.error(f"Unexpected Slack error: {exc}")

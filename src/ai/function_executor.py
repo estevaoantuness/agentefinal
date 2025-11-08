@@ -346,7 +346,7 @@ Sempre disponível para ajudar! 🚀
             finally:
                 db.close()
         except Exception as exc:  # pragma: no cover
-            logger.debug(f\"Could not resolve user name for {user_id}: {exc}\")
+            logger.debug(f"Could not resolve user name for {user_id}: {exc}")
             return None
 
     def _mark_onboarded(self, user_id: str, arguments: Dict) -> str:

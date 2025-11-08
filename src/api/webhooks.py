@@ -306,8 +306,7 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
 
             # Parse function result
             result_data = json.loads(function_result)
-            slack_meta = result_data.get('meta', {}) if isinstance(result_data, dict) else {}
-            slack_notified = slack_meta.get('slack_notified', False)
+            slack_notified = False
 
             if result_data.get('success'):
                 # Add to conversation history
@@ -413,11 +412,7 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                 function_args,
                 user_id
             )
-            try:
-                function_meta = json.loads(function_result)
-            except json.JSONDecodeError:
-                function_meta = {}
-            slack_notified = function_meta.get('meta', {}).get('slack_notified', False)
+            slack_notified = False
 
             conversation_manager.add_function_result(
                 user_id,

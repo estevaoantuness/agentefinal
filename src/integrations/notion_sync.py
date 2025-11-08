@@ -14,7 +14,12 @@ class NotionSync:
 
     def __init__(self):
         self.client = Client(auth=settings.NOTION_API_KEY)
-        self.database_id = settings.NOTION_DATABASE_ID
+        self.default_database_id = settings.NOTION_DATABASE_ID
+
+    def _resolve_database_id(self, user: Optional[User] = None) -> Optional[str]:
+        if user and getattr(user, "notion_database_id", None):
+            return user.notion_database_id
+        return self.default_database_id
 
     def _task_to_notion_properties(self, task: Task) -> Dict[str, Any]:
         """
@@ -138,7 +143,7 @@ class NotionSync:
             "notion_id": notion_page["id"]
         }
 
-    def create_task_in_notion(self, task: Task) -> Optional[str]:
+    def create_task_in_notion(self, task: Task, database_id: Optional[str]) -> Optional[str]:
         """
         Create a task in Notion.
 
@@ -148,11 +153,16 @@ class NotionSync:
         Returns:
             Notion page ID or None
         """
+        database_id = database_id or self.default_database_id
+        if not database_id:
+            logger.warning("No Notion database configured for create_task_in_notion")
+            return None
+
         try:
             properties = self._task_to_notion_properties(task)
 
             response = self.client.pages.create(
-                parent={"database_id": self.database_id},
+                parent={"database_id": database_id},
                 properties=properties
             )
 
@@ -205,14 +215,17 @@ class NotionSync:
         Returns:
             Number of tasks synced
         """
-        if not user.notion_database_id:
-            logger.warning(f"User {user.id} has no Notion database configured")
+        database_id = self._resolve_database_id(user)
+        if not database_id:
+            logger.warning(
+                f"User {user.id} has no Notion database configured and no global database set"
+            )
             return 0
 
         try:
             # Query Notion database
             response = self.client.databases.query(
-                database_id=user.notion_database_id,
+                database_id=database_id,
                 filter={
                     "property": "Status",
                     "select": {
@@ -271,6 +284,11 @@ class NotionSync:
         Returns:
             Number of tasks synced
         """
+        database_id = self._resolve_database_id(user)
+        if not database_id:
+            logger.warning(f"User {user.id} has no Notion database configured for sync_to_notion")
+            return 0
+
         try:
             # Get tasks that need syncing (no notion_id or updated after last sync)
             tasks = db.query(Task).filter(
@@ -283,7 +301,7 @@ class NotionSync:
             for task in tasks:
                 if not task.notion_id:
                     # Create in Notion
-                    notion_id = self.create_task_in_notion(task)
+                    notion_id = self.create_task_in_notion(task, database_id)
                     if notion_id:
                         task.notion_id = notion_id
                         task.last_synced_at = datetime.utcnow()

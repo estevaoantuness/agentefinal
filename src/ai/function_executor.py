@@ -4,6 +4,7 @@ from typing import Dict, Any
 
 from src.utils.logger import logger
 from src.integrations.notion_tasks import get_notion_task_reader
+from src.integrations.notion_sync import notion_sync
 
 
 class FunctionExecutor:
@@ -83,13 +84,23 @@ class FunctionExecutor:
             })
 
     def _view_tasks(self, user_id: str, arguments: Dict) -> str:
-        """Execute view_tasks."""
+        """Execute view_tasks with sync from Notion."""
         try:
             from src.database.session import SessionLocal
-            from src.database.models import Task, TaskStatus
+            from src.database.models import Task, TaskStatus, User
 
             db = SessionLocal()
             try:
+                # OPCIÓN A: Sync from Notion to PostgreSQL BEFORE querying
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if user:
+                    logger.info(f"Syncing tasks from Notion for user {user_id}")
+                    synced = notion_sync.sync_from_notion_to_db(user, db)
+                    logger.info(f"Synced {synced} tasks from Notion")
+                else:
+                    logger.warning(f"User {user_id} not found for sync")
+
+                # Now query the synced tasks
                 filter_status = arguments.get('filter_status', 'all')
                 query = db.query(Task).filter(Task.user_id == int(user_id))
 
@@ -123,10 +134,10 @@ class FunctionExecutor:
             })
 
     def _create_task(self, user_id: str, arguments: Dict) -> str:
-        """Execute create_task."""
+        """Execute create_task with optional Notion sync."""
         try:
             from src.database.session import SessionLocal
-            from src.database.models import Task, TaskStatus, TaskPriority
+            from src.database.models import Task, TaskStatus, TaskPriority, User
             from datetime import datetime
 
             title = arguments.get('title', '')
@@ -141,6 +152,8 @@ class FunctionExecutor:
 
             db = SessionLocal()
             try:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+
                 # Create new task
                 task = Task(
                     user_id=int(user_id),
@@ -151,6 +164,18 @@ class FunctionExecutor:
                 )
                 db.add(task)
                 db.commit()
+                db.refresh(task)
+
+                # Attempt to sync to Notion (optional - don't fail if Notion sync fails)
+                try:
+                    if user:
+                        notion_id = notion_sync.create_task_in_notion(task, user.notion_database_id)
+                        if notion_id:
+                            task.notion_id = notion_id
+                            db.commit()
+                            logger.info(f"Task {task.id} synced to Notion: {notion_id}")
+                except Exception as sync_error:
+                    logger.warning(f"Could not sync task to Notion: {sync_error}")
 
                 return json.dumps({
                     "success": True,
@@ -167,10 +192,10 @@ class FunctionExecutor:
             })
 
     def _mark_done(self, user_id: str, arguments: Dict) -> str:
-        """Execute mark_done."""
+        """Execute mark_done with Notion sync."""
         try:
             from src.database.session import SessionLocal
-            from src.database.models import Task, TaskStatus
+            from src.database.models import Task, TaskStatus, User
 
             task_numbers = arguments.get('task_numbers', [])
 
@@ -185,6 +210,7 @@ class FunctionExecutor:
                 # Get all tasks for user in order
                 tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
                 results = []
+                user = db.query(User).filter(User.id == int(user_id)).first()
 
                 for task_num in task_numbers:
                     if 0 < task_num <= len(tasks):
@@ -192,6 +218,14 @@ class FunctionExecutor:
                         task.status = TaskStatus.COMPLETED
                         db.commit()
                         results.append(f"✅ Task '{task.title}' marked as completed")
+
+                        # Attempt to sync status change to Notion
+                        try:
+                            if user and task.notion_id:
+                                notion_sync.update_task_in_notion(task)
+                                logger.info(f"Task {task.id} status synced to Notion")
+                        except Exception as sync_error:
+                            logger.warning(f"Could not sync task status to Notion: {sync_error}")
                     else:
                         results.append(f"❌ Task {task_num} not found")
 
@@ -210,10 +244,10 @@ class FunctionExecutor:
             })
 
     def _mark_progress(self, user_id: str, arguments: Dict) -> str:
-        """Execute mark_progress."""
+        """Execute mark_progress with Notion sync."""
         try:
             from src.database.session import SessionLocal
-            from src.database.models import Task, TaskStatus
+            from src.database.models import Task, TaskStatus, User
 
             task_numbers = arguments.get('task_numbers', [])
 
@@ -228,6 +262,7 @@ class FunctionExecutor:
                 # Get all tasks for user in order
                 tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
                 results = []
+                user = db.query(User).filter(User.id == int(user_id)).first()
 
                 for task_num in task_numbers:
                     if 0 < task_num <= len(tasks):
@@ -235,6 +270,14 @@ class FunctionExecutor:
                         task.status = TaskStatus.IN_PROGRESS
                         db.commit()
                         results.append(f"⏳ Task '{task.title}' marked as in progress")
+
+                        # Attempt to sync status change to Notion
+                        try:
+                            if user and task.notion_id:
+                                notion_sync.update_task_in_notion(task)
+                                logger.info(f"Task {task.id} status synced to Notion")
+                        except Exception as sync_error:
+                            logger.warning(f"Could not sync task status to Notion: {sync_error}")
                     else:
                         results.append(f"❌ Task {task_num} not found")
 

@@ -1,0 +1,88 @@
+# NLP Intents configuration
+language: pt-BR
+intents:
+  view_tasks:
+    synonyms:
+      - ver tarefas
+      - listar tarefas
+      - minhas tarefas
+    examples:
+      - "Quais são minhas tarefas?"
+      - "me mostra minhas tarefas"
+      - "o que tenho pra fazer"
+    patterns:
+      - "\b(ver|mostrar|listar)\s+(minhas\s+)?tarefas\b"
+      - "\btarefas? em andamento\b"
+    confidence: 0.8
+    slots:
+      required: []
+      optional:
+        - filter_status
+  create_task:
+    synonyms:
+      - criar tarefa
+      - adicionar tarefa
+      - nova tarefa
+    examples:
+      - "criar tarefa: enviar relatório"
+      - "adiciona uma task pra mim"
+      - "preciso fazer compra"
+    patterns:
+      - "\b(criar|adicionar|nova)\s+tarefa\b"
+      - "\bpreciso\s+(fazer|criar)\b"
+    confidence: 0.75
+    slots:
+      required:
+        - title
+      optional:
+        - description
+        - priority
+  mark_done:
+    synonyms:
+      - marcar feito
+      - concluir tarefa
+      - tarefa pronta
+    examples:
+      - "marcar tarefa 2 como feita"
+      - "terminei a 1 e a 3"
+      - "feito 5"
+    patterns:
+      - "\b(feito|conclu[íi]|terminei)\s+(\d+(\s*,\s*\d+)*)\b"
+      - "\btarefa\s+(\d+)\s+(tá|esta)\s+pronta\b"
+    confidence: 0.78
+    slots:
+      required:
+        - task_numbers
+      optional: []
+  mark_in_progress:
+    synonyms:
+      - começar tarefa
+      - em andamento
+      - trabalhando em
+    examples:
+      - "comecei a número 2"
+      - "estou trabalhando na 3"
+      - "task 5 em andamento"
+    patterns:
+      - "\b(comecei|iniciei|fazendo)\s+(a\s+)?(\d+)\b"
+      - "\btarefa\s+(\d+)\s+em andamento\b"
+    confidence: 0.75
+    slots:
+      required:
+        - task_numbers
+      optional: []
+  view_progress:
+    synonyms:
+      - ver progresso
+      - status geral
+      - resumo das tarefas
+    examples:
+      - "como está meu progresso?"
+      - "me mostra o status"
+      - "relatório"
+    patterns:
+      - "\b(progresso|status|relat[óo]rio)\b"
+    confidence: 0.7
+    slots:
+      required: []
+      optional: []

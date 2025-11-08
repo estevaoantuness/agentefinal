@@ -21,11 +21,15 @@ from src.integrations.notion_users import notion_user_manager
 
 # Command matcher for reliable command detection
 from src.ai.command_matcher import command_matcher
+from src.utils.text_normalizer import TextNormalizer
+from src.utils.message_humanizer import MessageHumanizer
 
 router = APIRouter()
 
 # Initialize OpenAI client
 openai_client = OpenAIClient()
+text_normalizer = TextNormalizer()
+message_humanizer = MessageHumanizer()
 
 # Emoji handling
 EMOJI_REGEX = re.compile(
@@ -241,14 +245,20 @@ async def process_incoming_message(
 
         user_id = str(user.id)
 
-        # Process with OpenAI - pass user name for personalization
-        response_text = await process_with_openai(user_id, message_text, db, user_name=user.name)
+        response_payload = await process_with_openai(user_id, message_text, db, user_name=user.name)
 
-        # Send response via Evolution API
-        evolution_client.send_text_message(
-            phone_number=phone_number,
-            message=response_text
-        )
+        if isinstance(response_payload, dict):
+            chunks = response_payload.get("chunks") or [response_payload.get("message", "")]
+        else:
+            chunks = [response_payload]
+
+        for chunk in chunks:
+            if not chunk:
+                continue
+            evolution_client.send_text_message(
+                phone_number=phone_number,
+                message=chunk
+            )
 
         logger.info(f"Message processed for user {normalized_phone}")
 
@@ -265,7 +275,7 @@ async def process_incoming_message(
             logger.error(f"Failed to send error message to {phone_number}: {inner_e}")
 
 
-async def process_with_openai(user_id: str, message: str, db: Session, user_name: str = None) -> str:
+async def process_with_openai(user_id: str, message: str, db: Session, user_name: str = None) -> Dict[str, Any]:
     """
     Process message with OpenAI and execute functions.
 
@@ -280,7 +290,9 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
     """
     try:
         # === PHASE 1: Try reliable command matching FIRST ===
-        command_match = command_matcher.match(message)
+        normalized_text = text_normalizer.remove_accents(message)
+        normalized_text = text_normalizer.convert_written_numbers(normalized_text)
+        command_match = command_matcher.match(normalized_text or message)
 
         if command_match and command_match.get('confidence') == 'high':
             # Direct function execution for high-confidence matches
@@ -294,6 +306,8 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
 
             # Parse function result
             result_data = json.loads(function_result)
+            slack_meta = result_data.get('meta', {}) if isinstance(result_data, dict) else {}
+            slack_notified = slack_meta.get('slack_notified', False)
 
             if result_data.get('success'):
                 # Add to conversation history
@@ -311,10 +325,17 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                     user_id=user_id,
                     user_name=user_name
                 )
-                response_text = clean_response_text(response.get('content', ''))
-                response_text = enforce_emoji_policy(user_id, response_text)
+                raw_response = response.get('content', '')
+                if not raw_response:
+                    raw_response = result_data.get('data', '')
+                response_text = clean_response_text(raw_response or '')
                 conversation_manager.add_message(user_id, "assistant", response_text)
-                return response_text
+                return _build_response_payload(
+                    user_id,
+                    response_text,
+                    context=command_match['function'],
+                    slack_notified=slack_notified
+                )
             else:
                 # Function failed, fall through to LLM
                 logger.warning(f"Command execution failed: {result_data.get('error')}")
@@ -341,6 +362,7 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
         function_args = None
         tool_call_id = None
         tool_call_payload = None
+        slack_notified = False
 
         # Check if OpenAI wants to call a function (tool_calls)
         if response.get('function_call'):
@@ -391,6 +413,11 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                 function_args,
                 user_id
             )
+            try:
+                function_meta = json.loads(function_result)
+            except json.JSONDecodeError:
+                function_meta = {}
+            slack_notified = function_meta.get('meta', {}).get('slack_notified', False)
 
             conversation_manager.add_function_result(
                 user_id,
@@ -407,20 +434,48 @@ async def process_with_openai(user_id: str, message: str, db: Session, user_name
                 user_name=user_name
             )
             response_text = clean_response_text(final_response.get('content', ''))
-            response_text = enforce_emoji_policy(user_id, response_text)
+            response_context = function_name
         else:
             # Direct response - but clean function call leakage
             response_text = clean_response_text(response.get('content', ''))
-            response_text = enforce_emoji_policy(user_id, response_text)
+            response_context = None
 
         # Add assistant response to history
         conversation_manager.add_message(user_id, "assistant", response_text)
 
-        return response_text
+        return _build_response_payload(
+            user_id,
+            response_text,
+            context=response_context,
+            slack_notified=slack_notified
+        )
 
     except Exception as e:
         logger.error(f"Error processing with OpenAI: {e}", exc_info=True)
-        return "Desculpe, tive um problema ao processar sua mensagem. Pode tentar novamente?"
+        return _build_response_payload(
+            user_id,
+            message_humanizer.humanize_error("Tente novamente em instantes."),
+            context="error"
+        )
+
+
+def _build_response_payload(
+    user_id: str,
+    text: str,
+    context: Optional[str] = None,
+    slack_notified: bool = False
+) -> Dict[str, Any]:
+    content = text or "Tudo certo por aqui."
+    enriched = message_humanizer.add_contextual_emoji(content, context)
+    regulated = enforce_emoji_policy(user_id, enriched)
+    chunks = message_humanizer.chunk_long_message(regulated)
+    chunks = chunks or [regulated]
+    return {
+        "message": regulated,
+        "chunks": chunks,
+        "context": context,
+        "slack_notified": slack_notified
+    }
 
 
 @router.post("/webhook/evolution")

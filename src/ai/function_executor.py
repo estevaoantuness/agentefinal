@@ -1,8 +1,9 @@
 """Execute functions called by OpenAI."""
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from src.utils.logger import logger
+from src.integrations.slack_notifier import slack_notifier
 from src.integrations.notion_tasks import get_notion_task_reader
 
 
@@ -151,10 +152,15 @@ class FunctionExecutor:
                 )
                 db.add(task)
                 db.commit()
+                db.refresh(task)
+
+                user_name = self._get_user_name(int(user_id))
+                slack_sent = slack_notifier.notify_task_created(task.title, user_name)
 
                 return json.dumps({
                     "success": True,
-                    "data": f"✅ Task '{title}' created successfully!"
+                    "data": f"✅ Task '{title}' created successfully!",
+                    "meta": {"slack_notified": slack_sent}
                 })
             finally:
                 db.close()
@@ -185,6 +191,8 @@ class FunctionExecutor:
                 # Get all tasks for user in order
                 tasks = db.query(Task).filter(Task.user_id == int(user_id)).all()
                 results = []
+                user_name = self._get_user_name(int(user_id))
+                slack_sent = False
 
                 for task_num in task_numbers:
                     if 0 < task_num <= len(tasks):
@@ -192,12 +200,15 @@ class FunctionExecutor:
                         task.status = TaskStatus.COMPLETED
                         db.commit()
                         results.append(f"✅ Task '{task.title}' marked as completed")
+                        if slack_notifier.notify_task_completed(task.title, user_name):
+                            slack_sent = True
                     else:
                         results.append(f"❌ Task {task_num} not found")
 
                 return json.dumps({
                     "success": True,
-                    "data": "\n".join(results)
+                    "data": "\n".join(results),
+                    "meta": {"slack_notified": slack_sent}
                 })
             finally:
                 db.close()
@@ -268,6 +279,13 @@ class FunctionExecutor:
                 pending = len([t for t in tasks if t.status == TaskStatus.PENDING])
 
                 percentage = (completed / total * 100) if total > 0 else 0
+                user_name = self._get_user_name(int(user_id))
+                slack_notifier.notify_progress(
+                    user_name or "",
+                    completed,
+                    total,
+                    round(percentage, 1)
+                )
 
                 return json.dumps({
                     "success": True,
@@ -314,6 +332,22 @@ Sempre disponível para ajudar! 🚀
             "success": True,
             "data": help_text
         })
+
+    def _get_user_name(self, user_id: int) -> Optional[str]:
+        """Return user name from database if available."""
+        try:
+            from src.database.session import SessionLocal
+            from src.database.models import User
+
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == user_id).first()
+                return user.name if user else None
+            finally:
+                db.close()
+        except Exception as exc:  # pragma: no cover
+            logger.debug(f\"Could not resolve user name for {user_id}: {exc}\")
+            return None
 
     def _mark_onboarded(self, user_id: str, arguments: Dict) -> str:
         """Mark user as completed onboarding in Notion."""

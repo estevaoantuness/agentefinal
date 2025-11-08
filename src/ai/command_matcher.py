@@ -1,57 +1,35 @@
-"""
-NLP-like command matching system for reliable intent detection.
+"""NLP-like command matching with normalization and slots."""
 
-Provides fallback command recognition when LLM function calling fails.
-Uses regex patterns to detect common user intents before calling Groq.
-"""
-
-import re
 import json
+import re
 from typing import Optional, Dict, Any
+
+import yaml
+
 from src.utils.logger import logger
+from src.utils.text_normalizer import TextNormalizer
+from src.ai.slot_tracker import SlotTracker
 
 
 class CommandMatcher:
-    """Simple but reliable command pattern matching system."""
+    """Intent matcher powered by regex + slot tracking."""
 
-    def __init__(self):
-        """Initialize command patterns for common intents."""
-        # Regex patterns for each command - multiple synonyms per command
-        self.patterns = {
-            'view_tasks': [
-                r'\b(minha[s]?\s+tarefa[s]?|ver\s+tarefa|lista|listar|mostrar\s+tarefa[s]?|quai[s]?\s+tarefa[s]?)',
-                r'\b(o\s+que\s+tenho|que\s+tenho\s+(pra\s+)?fazer|tarefas?)',
-                r'\b(tarefas?\s+(pendente|em\s+andamento|concluída))',
-                r'\b(task|todo)',
-            ],
-            'create_task': [
-                r'\b(criar|nova|adicionar|inserir)\s+tarefa',
-                r'\bpreciso\s+(fazer|criar)',
-                r'\b(tarefa|to-?do):\s+',
-                r'\b(cria|add)\s+',
-            ],
-            'mark_done': [
-                r'\b(feito|concluí|completei|finalizei|terminei)\s+(\d+)',
-                r'\bmarcar?\s+(como\s+)?(feita|completa|concluída)\s+(\d+)',
-                r'\b(done|complete)\s+(\d+)',
-                r'\b(pronta|pronto)\s+(\d+)',
-            ],
-            'mark_progress': [
-                r'\b(comecei|iniciei|estou\s+fazendo|comeco|inicio)\s+(\d+)',
-                r'\bem\s+andamento\s+(\d+)',
-                r'\b(working\s+on|started)\s+(\d+)',
-                r'\b(andamento|progresso)\s+(\d+)',
-            ],
-            'view_progress': [
-                r'\b(meu\s+progresso|como\s+(estou\s+)?indo|qual\s+(é\s+)?meu\s+progresso)',
-                r'\b(relatório|status)',
-                r'\b(progress|how.*going)',
-            ],
-            'get_help': [
-                r'\b(ajuda|help|comandos?|o\s+que\s+(você\s+)?(faz|pode|consegue))',
-                r'\b(como\s+funciona|como\s+usar)',
-            ],
-        }
+    def __init__(self, intents_path: str = "config/intents.yaml"):
+        self.normalizer = TextNormalizer()
+        self.slot_tracker = SlotTracker()
+        self.intents = self._load_intents(intents_path)
+
+    def _load_intents(self, path: str) -> Dict[str, Any]:
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                config = yaml.safe_load(file)
+                return config.get("intents", {})
+        except FileNotFoundError:
+            logger.warning(f"Intents config not found: {path}")
+            return {}
+        except yaml.YAMLError as exc:
+            logger.error(f"Failed to parse intents config: {exc}")
+            return {}
 
     def match(self, message: str) -> Optional[Dict[str, Any]]:
         """
@@ -66,36 +44,37 @@ class CommandMatcher:
         if not message or not isinstance(message, str):
             return None
 
-        message_lower = message.lower().strip()
+        normalized = self.normalizer.remove_accents(message.lower().strip())
+        normalized = self.normalizer.convert_written_numbers(normalized)
 
-        # Try each command pattern
-        for function_name, patterns in self.patterns.items():
-            for pattern in patterns:
+        best_match = None
+        best_confidence = 0.0
+
+        for intent_name, intent_data in self.intents.items():
+            patterns = intent_data.get("patterns", [])
+            synonyms = intent_data.get("synonyms", [])
+            confidence = float(intent_data.get("confidence", 0))
+
+            candidates = patterns + [re.escape(s.lower()) for s in synonyms]
+
+            for pattern in candidates:
                 try:
-                    match = re.search(pattern, message_lower, re.IGNORECASE)
-                    if match:
-                        logger.info(
-                            f"Command matched: {function_name} "
-                            f"(pattern: {pattern[:40]}...)"
-                        )
+                    if re.search(pattern, normalized, re.IGNORECASE):
+                        if confidence > best_confidence:
+                            args = self._extract_arguments(intent_name, normalized, pattern)
+                            missing = self.slot_tracker.check_missing_slots(intent_name, args)
+                            best_match = {
+                                "function": intent_name,
+                                "arguments": args,
+                                "confidence": confidence,
+                                "missing_slots": missing,
+                            }
+                            best_confidence = confidence
+                        break
+                except re.error as exc:
+                    logger.warning(f"Invalid regex '{pattern}': {exc}")
 
-                        # Extract arguments based on function type
-                        args = self._extract_arguments(
-                            function_name,
-                            message_lower,
-                            match
-                        )
-
-                        return {
-                            'function': function_name,
-                            'arguments': args,
-                            'confidence': 'high'
-                        }
-                except Exception as e:
-                    logger.warning(f"Error matching pattern '{pattern}': {e}")
-                    continue
-
-        return None
+        return best_match
 
     def _extract_arguments(
         self,
@@ -136,7 +115,7 @@ class CommandMatcher:
             if title_match:
                 title = title_match.group(1).strip()
                 return {'title': title}
-            return {}  # Let LLM handle title extraction in conversation
+            return {}
 
         elif function_name in ['mark_done', 'mark_progress']:
             # Extract task numbers from the message

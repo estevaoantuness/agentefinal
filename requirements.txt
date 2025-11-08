@@ -17,6 +17,7 @@ groq>=0.4.0
 # Notion Integration
 notion-client==2.2.1
 slack_sdk==3.33.1
+pyyaml==6.0.2
 
 # HTTP Requests
 requests==2.31.0

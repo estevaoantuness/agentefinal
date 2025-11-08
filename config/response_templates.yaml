@@ -1,0 +1,51 @@
+greeting:
+  - weight: 3
+    template: "Oi {user_name}! Bora começar? 😊"
+  - weight: 2
+    template: "E aí {user_name}, pronto pra organizar o dia?"
+  - weight: 1
+    template: "Olá {user_name}! Conte comigo."
+  - weight: 1
+    template: "Tudo certo por aí, {user_name}?"
+  - weight: 1
+    template: "Bem-vindo de volta, {user_name}!"
+
+confirmation:
+  - weight: 3
+    template: "✅ Tarefa concluída: {task_name}"
+  - weight: 2
+    template: "Mais uma riscada da lista: {task_name}!"
+  - weight: 1
+    template: "Feito! {task_name} já era."
+  - weight: 1
+    template: "Boa! {task_name} está marcada como {action}."
+  - weight: 1
+    template: "Anotei: {task_name} ficou como {action}."
+
+task_list:
+  - weight: 2
+    template: "📋 Suas tarefas:\n{body}\n{motivation}"
+  - weight: 1
+    template: "Aqui está seu radar de hoje:\n{body}\n{motivation}"
+  - weight: 1
+    template: "Resumo rápido:\n{body}\n{motivation}"
+
+progress_report:
+  - weight: 2
+    template: "📊 Progresso: {completed}/{total} ({percentage:.1f}%). {motivation}"
+  - weight: 1
+    template: "Status geral → Feitas: {completed}, Em andamento: {in_progress}, Pendentes: {pending}. {motivation}"
+  - weight: 1
+    template: "Você concluiu {completed} de {total}. {motivation}"
+
+error:
+  - weight: 2
+    template: "Ops, deu um errinho: {message}. Tenta de novo?"
+  - weight: 1
+    template: "Não consegui completar isso agora. {message}"
+  - weight: 1
+    template: "Ixi, falhou aqui 😕 {message}"
+  - weight: 1
+    template: "Algo saiu do controle. {message}"
+  - weight: 1
+    template: "Deixa comigo, vou resolver já. {message}"

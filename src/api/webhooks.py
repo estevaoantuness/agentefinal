@@ -540,6 +540,96 @@ async def evolution_webhook(
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/webhook/slack")
+async def slack_webhook(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> Dict[str, str]:
+    """
+    Slack webhook handler for task updates from Notion.
+
+    Receives task notifications from Slack (triggered by Notion automations)
+    and processes them accordingly.
+
+    Args:
+        request: FastAPI request object
+        background_tasks: Background task manager
+        db: Database session
+
+    Returns:
+        Status response
+    """
+    try:
+        data = await request.json()
+
+        # Slack URL verification challenge (required for webhook setup)
+        if data.get("type") == "url_verification":
+            logger.info("Slack URL verification received")
+            return {"challenge": data.get("challenge")}
+
+        # Handle Slack events
+        if data.get("type") == "event_callback":
+            event = data.get("event", {})
+            event_type = event.get("type")
+
+            logger.info(f"Slack event received: {event_type}")
+
+            # Handle message events from #tasks channel
+            if event_type == "message":
+                channel = event.get("channel")
+                text = event.get("text", "")
+                user = event.get("user", "")
+
+                logger.info(f"Slack message from {user} in {channel}: {text}")
+
+                # Process the message from Slack
+                # Extract task info from Slack message (formatted by Notion automation)
+                if text:
+                    background_tasks.add_task(
+                        process_slack_message,
+                        text=text,
+                        channel=channel,
+                        user=user,
+                        db=db
+                    )
+
+            return {"status": "ok"}
+
+        logger.debug(f"Unhandled Slack webhook data: {data}")
+        return {"status": "ignored"}
+
+    except Exception as e:
+        logger.error(f"Slack webhook error: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+
+async def process_slack_message(text: str, channel: str, user: str, db: Session) -> None:
+    """
+    Process message received from Slack webhook.
+
+    Parses task information and broadcasts to relevant WhatsApp users.
+
+    Args:
+        text: Message text from Slack
+        channel: Slack channel
+        user: Slack user ID
+        db: Database session
+    """
+    try:
+        logger.info(f"Processing Slack message: {text[:100]}")
+
+        # Parse task info from Slack message
+        # Expected format from Notion automation:
+        # "Task: <task_name> | Status: <status> | Assigned: <assignee>"
+
+        # For now, just log it. You can extend this to:
+        # 1. Extract task details
+        # 2. Query which users are assigned
+        # 3. Send update to their WhatsApp
+
+        logger.info(f"Slack message processed successfully")
+
+    except Exception as e:
+        logger.error(f"Error processing Slack message: {e}", exc_info=True)
+
+
 @router.get("/health")
 async def health_check() -> Dict[str, str]:
     """

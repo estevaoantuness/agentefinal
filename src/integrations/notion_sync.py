@@ -141,10 +141,10 @@ class NotionSync:
         title_prop = title_property.get("title", []) if isinstance(title_property, dict) else []
         title = title_prop[0]["text"]["content"] if title_prop else "Untitled"
 
-        # Extract status
+        # Extract status (handle both select and status property types)
         status_property = self._get_property(props, self.status_props) or {}
-        select_block = status_property.get("select", {}) if isinstance(status_property, dict) else {}
-        status_name = select_block.get("name", "A Fazer")
+        status_block = status_property.get("status", {}) or status_property.get("select", {})
+        status_name = status_block.get("name", "A Fazer") if isinstance(status_block, dict) else "A Fazer"
         status = {
             "A Fazer": TaskStatus.PENDING,
             "Em Andamento": TaskStatus.IN_PROGRESS,
@@ -282,6 +282,21 @@ class NotionSync:
             for page in response.get("results", []):
                 notion_id = page["id"]
                 task_data = self._notion_to_task_data(page)
+
+                # Filter: Only sync if user is in Assignees or Assignee field
+                props = page.get("properties", {}) or {}
+                assignees_property = self._get_property(props, self.assignees_props) or {}
+                assignees_list = assignees_property.get("multi_select", []) if isinstance(assignees_property, dict) else []
+                assignee_names = [a.get("name", "") for a in assignees_list if isinstance(a, dict)]
+
+                # Check if user.name is in assignees
+                user_name_lower = (user.name or "").lower().strip()
+                is_assigned = any(user_name_lower in name.lower() for name in assignee_names) if user_name_lower else False
+
+                # Skip if not assigned to this user (unless no assignees at all)
+                if assignee_names and not is_assigned:
+                    logger.debug(f"Skipping task (not assigned to {user.name}): {task_data.get('title')}")
+                    continue
 
                 # Check if task exists
                 task = db.query(Task).filter(

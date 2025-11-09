@@ -1,4 +1,5 @@
 """Notion API integration for task synchronization."""
+import os
 from notion_client import Client
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -15,11 +16,43 @@ class NotionSync:
     def __init__(self):
         self.client = Client(auth=settings.NOTION_API_KEY)
         self.default_database_id = settings.NOTION_DATABASE_ID
+        # Allow overriding property names via env vars when the Notion DB uses custom labels
+        self.title_props = [
+            os.getenv("NOTION_TITLE_PROPERTY") or "Nome",
+            "Name",
+            "Título",
+            "Title",
+        ]
+        self.status_props = [
+            os.getenv("NOTION_STATUS_PROPERTY") or "Status",
+        ]
+        self.priority_props = [
+            os.getenv("NOTION_PRIORITY_PROPERTY") or "Prioridade",
+            "Priority",
+        ]
+        self.description_props = [
+            os.getenv("NOTION_DESCRIPTION_PROPERTY") or "Descrição",
+            "Description",
+            "Notas",
+        ]
+        self.due_date_props = [
+            os.getenv("NOTION_DUE_DATE_PROPERTY") or "Prazo",
+            "Due Date",
+            "Deadline",
+        ]
 
     def _resolve_database_id(self, user: Optional[User] = None) -> Optional[str]:
         if user and getattr(user, "notion_database_id", None):
             return user.notion_database_id
         return self.default_database_id
+
+    def _get_property(self, props: Dict[str, Any], candidates: List[str]) -> Optional[Dict[str, Any]]:
+        """Return the first non-null Notion property dict matching the candidate list."""
+        for name in candidates:
+            value = props.get(name)
+            if value is not None:
+                return value
+        return None
 
     def _task_to_notion_properties(self, task: Task) -> Dict[str, Any]:
         """
@@ -31,8 +64,14 @@ class NotionSync:
         Returns:
             Notion properties dictionary
         """
+        title_key = self.title_props[0]
+        status_key = self.status_props[0]
+        priority_key = self.priority_props[0]
+        description_key = self.description_props[0]
+        due_date_key = self.due_date_props[0]
+
         properties = {
-            "Nome": {
+            title_key: {
                 "title": [
                     {
                         "text": {
@@ -41,7 +80,7 @@ class NotionSync:
                     }
                 ]
             },
-            "Status": {
+            status_key: {
                 "select": {
                     "name": {
                         "pending": "A Fazer",
@@ -51,7 +90,7 @@ class NotionSync:
                     }.get(task.status, "A Fazer")
                 }
             },
-            "Prioridade": {
+            priority_key: {
                 "select": {
                     "name": {
                         "low": "Baixa",
@@ -65,7 +104,7 @@ class NotionSync:
 
         # Add description
         if task.description:
-            properties["Descrição"] = {
+            properties[description_key] = {
                 "rich_text": [
                     {
                         "text": {
@@ -77,7 +116,7 @@ class NotionSync:
 
         # Add due date
         if task.due_date:
-            properties["Prazo"] = {
+            properties[due_date_key] = {
                 "date": {
                     "start": task.due_date.isoformat()
                 }
@@ -95,15 +134,17 @@ class NotionSync:
         Returns:
             Task data dictionary
         """
-        props = notion_page.get("properties", {})
+        props = notion_page.get("properties", {}) or {}
 
         # Extract title
-        title_prop = props.get("Nome", {}).get("title", [])
+        title_property = self._get_property(props, self.title_props) or {}
+        title_prop = title_property.get("title", []) if isinstance(title_property, dict) else []
         title = title_prop[0]["text"]["content"] if title_prop else "Untitled"
 
         # Extract status
-        status_prop = props.get("Status", {}).get("select", {})
-        status_name = status_prop.get("name", "A Fazer")
+        status_property = self._get_property(props, self.status_props) or {}
+        select_block = status_property.get("select", {}) if isinstance(status_property, dict) else {}
+        status_name = select_block.get("name", "A Fazer")
         status = {
             "A Fazer": TaskStatus.PENDING,
             "Em Andamento": TaskStatus.IN_PROGRESS,
@@ -112,8 +153,9 @@ class NotionSync:
         }.get(status_name, TaskStatus.PENDING)
 
         # Extract priority
-        priority_prop = props.get("Prioridade", {}).get("select", {})
-        priority_name = priority_prop.get("name", "Média")
+        priority_property = self._get_property(props, self.priority_props) or {}
+        priority_select = priority_property.get("select", {}) if isinstance(priority_property, dict) else {}
+        priority_name = priority_select.get("name", "Média")
         priority = {
             "Baixa": TaskPriority.LOW,
             "Média": TaskPriority.MEDIUM,
@@ -122,11 +164,13 @@ class NotionSync:
         }.get(priority_name, TaskPriority.MEDIUM)
 
         # Extract description
-        desc_prop = props.get("Descrição", {}).get("rich_text", [])
+        description_property = self._get_property(props, self.description_props) or {}
+        desc_prop = description_property.get("rich_text", []) if isinstance(description_property, dict) else []
         description = desc_prop[0]["text"]["content"] if desc_prop else None
 
         # Extract due date
-        date_prop = props.get("Prazo", {}).get("date")
+        due_date_property = self._get_property(props, self.due_date_props) or {}
+        date_prop = due_date_property.get("date") if isinstance(due_date_property, dict) else None
         due_date = None
         if date_prop and date_prop.get("start"):
             try:
@@ -222,17 +266,16 @@ class NotionSync:
             )
             return 0
 
+        def _query_database():
+            """Query database without filters to avoid status type mismatches."""
+            # Query without filters - get all tasks (filter by status later if needed)
+            return self.client.databases.query(
+                database_id=database_id
+            )
+
         try:
             # Query Notion database
-            response = self.client.databases.query(
-                database_id=database_id,
-                filter={
-                    "property": "Status",
-                    "select": {
-                        "does_not_equal": "Arquivado"
-                    }
-                }
-            )
+            response = _query_database()
 
             synced_count = 0
 

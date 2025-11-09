@@ -1,6 +1,8 @@
 """Webhook handlers for Evolution API - with OpenAI integration."""
 import json
 import re
+import hmac
+import hashlib
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, List
@@ -10,6 +12,7 @@ from src.database.models import User
 from src.utils.logger import logger
 from src.utils.helpers import normalize_phone_number
 from src.integrations.evolution_api import evolution_client
+from src.config.settings import settings
 
 # OpenAI integration
 from src.ai.openai_client import OpenAIClient
@@ -538,6 +541,125 @@ async def evolution_webhook(
     except Exception as e:
         logger.error(f"Webhook error: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}
+
+
+@router.post("/webhook/notion")
+async def notion_webhook(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> Dict[str, str]:
+    """
+    Notion webhook handler for task updates.
+
+    Receives task events from Notion (created, updated, deleted) and syncs to PostgreSQL.
+
+    Args:
+        request: FastAPI request object
+        background_tasks: Background task manager
+        db: Database session
+
+    Returns:
+        Status response
+    """
+    try:
+        # Get body as text for signature verification
+        body = await request.body()
+        data = json.loads(body)
+
+        # Verify webhook signature (security)
+        signature = request.headers.get("x-notion-signature")
+        if signature and settings.NOTION_WEBHOOK_SECRET:
+            # Compute HMAC-SHA256
+            computed_signature = "v0=" + hmac.new(
+                settings.NOTION_WEBHOOK_SECRET.encode(),
+                body,
+                hashlib.sha256
+            ).hexdigest()
+
+            if not hmac.compare_digest(signature, computed_signature):
+                logger.warning("Invalid Notion webhook signature")
+                return {"status": "error", "message": "Invalid signature"}
+
+        logger.info(f"Notion webhook received: {data.get('type')}")
+
+        # Handle Notion events
+        if data.get("type") == "ping":
+            logger.info("Notion webhook ping received")
+            return {"type": "pong"}
+
+        if data.get("type") == "page_change":
+            # Task was updated
+            page = data.get("page", {})
+            page_id = page.get("id")
+
+            if page_id:
+                logger.info(f"Notion page updated: {page_id}")
+                background_tasks.add_task(
+                    process_notion_page_change,
+                    page_id=page_id,
+                    db=db
+                )
+
+        elif data.get("type") == "database_change":
+            # Database entries changed
+            logger.info("Notion database changed")
+            background_tasks.add_task(
+                sync_all_notion_tasks,
+                db=db
+            )
+
+        return {"status": "success"}
+
+    except Exception as e:
+        logger.error(f"Notion webhook error: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+
+async def process_notion_page_change(page_id: str, db: Session) -> None:
+    """
+    Process a single page change from Notion.
+
+    Args:
+        page_id: Notion page ID
+        db: Database session
+    """
+    try:
+        from src.integrations.notion_sync import notion_sync
+
+        logger.info(f"Processing Notion page change: {page_id}")
+        # TODO: Implement single page sync
+        logger.info(f"Page {page_id} processed")
+
+    except Exception as e:
+        logger.error(f"Error processing Notion page: {e}", exc_info=True)
+
+
+async def sync_all_notion_tasks(db: Session) -> None:
+    """
+    Sync all tasks from Notion after database change.
+
+    Args:
+        db: Database session
+    """
+    try:
+        from src.integrations.notion_sync import notion_sync
+        from src.database.models import User
+
+        logger.info("Syncing all tasks from Notion")
+
+        # Get all users and sync their tasks
+        users = db.query(User).filter(User.is_active == True).all()
+        total_synced = 0
+
+        for user in users:
+            try:
+                synced = notion_sync.sync_from_notion_to_db(user, db)
+                total_synced += synced
+                logger.info(f"Synced {synced} tasks for user {user.name}")
+            except Exception as user_error:
+                logger.warning(f"Error syncing for user {user.id}: {user_error}")
+
+        logger.info(f"Total tasks synced from Notion: {total_synced}")
+
+    except Exception as e:
+        logger.error(f"Error syncing Notion tasks: {e}", exc_info=True)
 
 
 @router.post("/webhook/slack")

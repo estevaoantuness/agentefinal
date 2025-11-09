@@ -109,7 +109,7 @@ def _map_status(status_name: Optional[str]) -> Optional[str]:
     return status_name
 
 
-@router.post("/webhook")
+@router.api_route("/webhook", methods=["POST"])
 async def handle_notion_webhook(request: Request, authorization: str = Header(None)):
     """Receive Notion automation webhook and mirror the page into the bot's Notion database."""
     token = settings.NOTION_WEBHOOK_TOKEN
@@ -118,6 +118,17 @@ async def handle_notion_webhook(request: Request, authorization: str = Header(No
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     payload = await request.json()
+
+    # Handle Notion webhook verification challenge
+    challenge = payload.get("challenge")
+    if challenge:
+        logger.info("Notion webhook verification challenge received")
+        return {"challenge": challenge}
+
+    verification_token = payload.get("verification_token")
+    if verification_token:
+        logger.warning(f"[Notion Webhook] verification_token received: {verification_token}")
+
     page_id = (
         payload.get("page_id")
         or payload.get("trigger", {}).get("page", {}).get("id")
